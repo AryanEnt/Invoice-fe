@@ -1,0 +1,202 @@
+@import "tailwindcss";
+
+:root {
+  --ink: #141517;
+  --background: #f5f5f6;
+  --foreground: #141517;
+  --surface: #ffffff;
+  --muted: #6b6d70;
+  --muted-soft: #f1f1f2;
+  --border: #e6e7e8;
+  --ring: #d41920;
+  --primary: #d41920;
+  --primary-hover: #b7141b;
+  --primary-foreground: #ffffff;
+  --primary-soft: #fceeee;
+  --success: #2f6f4e;
+  --success-soft: #eef6f1;
+  --warning: #9a6b12;
+  --warning-soft: #f8f3e8;
+  --danger: #d41920;
+  --danger-soft: #fceeee;
+  --info: #141517;
+  --info-soft: #f1f1f2;
+  --sidebar: #141517;
+  --sidebar-foreground: #f5f5f6;
+  --sidebar-muted: #9a9b9d;
+  --sidebar-hover: rgb(255 255 255 / 0.06);
+  --sidebar-border: rgb(255 255 255 / 0.08);
+  --radius-sm: 8px;
+  --radius-md: 16px;
+  --radius-lg: 20px;
+  --chart-grid: #ececed;
+  --chart-axis: #6b6d70;
+  --chart-primary: #d41920;
+  --chart-secondary: #141517;
+  --chart-muted: #9a9b9d;
+  --chart-tooltip-bg: #ffffff;
+  --chart-tooltip-border: #e6e7e8;
+}
+
+.dark {
+  --background: #141517;
+  --foreground: #f5f5f6;
+  --surface: #1c1d1f;
+  --muted: #9a9b9d;
+  --muted-soft: #222325;
+  --border: rgb(255 255 255 / 0.1);
+  --ring: #d41920;
+  --primary: #d41920;
+  --primary-hover: #e12a31;
+  --primary-foreground: #ffffff;
+  --primary-soft: rgb(212 25 32 / 0.16);
+  --success: #6fbf93;
+  --success-soft: rgb(47 111 78 / 0.2);
+  --warning: #d4b06a;
+  --warning-soft: rgb(154 107 18 / 0.2);
+  --danger: #e12a31;
+  --danger-soft: rgb(212 25 32 / 0.16);
+  --info: #f5f5f6;
+  --info-soft: #222325;
+  --sidebar: #0f1011;
+  --sidebar-foreground: #f5f5f6;
+  --sidebar-muted: #9a9b9d;
+  --sidebar-hover: rgb(255 255 255 / 0.06);
+  --sidebar-border: rgb(255 255 255 / 0.08);
+  --chart-grid: rgb(255 255 255 / 0.08);
+  --chart-axis: #9a9b9d;
+  --chart-primary: #d41920;
+  --chart-secondary: #f5f5f6;
+  --chart-muted: #6b6d70;
+  --chart-tooltip-bg: #1c1d1f;
+  --chart-tooltip-border: rgb(255 255 255 / 0.1);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-muted: var(--muted);
+  --color-muted-soft: var(--muted-soft);
+  --color-border: var(--border);
+  --color-ring: var(--ring);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-soft: var(--primary-soft);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-info: var(--info);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-muted: var(--sidebar-muted);
+  --color-sidebar-hover: var(--sidebar-hover);
+  --color-sidebar-border: var(--sidebar-border);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--primary) 16%, white);
+  color: var(--ink);
+}
+
+.member-action-btn {
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: 1px solid transparent;
+}
+
+.member-action-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.member-action-btn.edit {
+  background: var(--muted-soft);
+  color: var(--foreground);
+  border-color: var(--border);
+}
+
+.member-action-btn.edit:hover:not(:disabled) {
+  background: var(--surface);
+  border-color: color-mix(in srgb, var(--foreground) 15%, var(--border));
+}
+
+.member-action-btn.view {
+  background: var(--surface);
+  color: var(--foreground);
+  border-color: var(--border);
+}
+
+.member-action-btn.view:hover:not(:disabled) {
+  background: var(--muted-soft);
+  border-color: color-mix(in srgb, var(--foreground) 15%, var(--border));
+}
+
+.member-action-btn.deactivate {
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 20%, transparent);
+}
+
+.member-action-btn.deactivate:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  border-color: color-mix(in srgb, var(--danger) 30%, transparent);
+}
+
+.member-action-btn.activate {
+  background: color-mix(in srgb, var(--success) 8%, transparent);
+  color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 20%, transparent);
+}
+
+.member-action-btn.activate:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--success) 14%, transparent);
+  border-color: color-mix(in srgb, var(--success) 30%, transparent);
+}
+
+.member-action-btn.delete {
+  background: var(--danger-soft);
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 20%, transparent);
+}
+
+.member-action-btn.delete:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  border-color: color-mix(in srgb, var(--danger) 30%, transparent);
+}
