@@ -48,7 +48,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/settings/invoice", label: "Invoice Settings", roles: ["SUPER_ADMIN"], match: "prefix", icon: "invoice", permission: "SETTINGS_VIEW" },
       { href: "/settings/templates", label: "Templates", roles: ["SUPER_ADMIN"], match: "prefix", icon: "settings", permission: "SETTINGS_VIEW" },
       { href: "/settings/account", label: "Account", roles: ["SUPER_ADMIN"], match: "prefix", icon: "admin", permission: "SETTINGS_VIEW" },
-      { href: "/settings/payment", label: "Payment", roles: ["SUPER_ADMIN"], match: "prefix", icon: "payment", permission: "SETTINGS_VIEW" },
+      { href: "/settings/payment", label: "Payment Gateways", roles: ["SUPER_ADMIN"], match: "prefix", icon: "payment", permission: "SETTINGS_VIEW" },
     ],
   },
   {

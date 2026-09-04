@@ -114,6 +114,84 @@ export async function saveEmailTemplates(
   return data.templates;
 }
 
-export async function getPayPalConnectUrl(): Promise<{ url: string; redirectUri: string }> {
-  return apiRequest<{ url: string; redirectUri: string }>("/api/settings/payment/paypal/connect");
+export type PayPalGatewayStatus = {
+  connected: boolean;
+  configured: boolean;
+  mode: "identity";
+  architecture: "single_company";
+  environment: "sandbox" | "production";
+  account: string | null;
+  connectedAt: string | null;
+  lastVerifiedAt: string | null;
+  redirectUri: string | null;
+};
+
+export async function getPayPalGatewayStatus(): Promise<PayPalGatewayStatus> {
+  return apiRequest<PayPalGatewayStatus>("/api/settings/payment/paypal");
 }
+
+export async function startPayPalConnect(): Promise<{
+  mode: "identity";
+  connected: false;
+  url: string;
+  environment: "sandbox" | "live";
+  redirectUri: string;
+}> {
+  return apiRequest("/api/settings/payment/paypal/connect", { method: "POST" });
+}
+
+export async function testPayPalGateway(): Promise<{
+  connected: boolean;
+  environment: "sandbox" | "live";
+  verifiedAt?: string;
+  message?: string;
+}> {
+  return apiRequest("/api/settings/payment/paypal/test", { method: "POST" });
+}
+
+export async function disconnectPayPalGateway(): Promise<PayPalGatewayStatus> {
+  return apiRequest("/api/settings/payment/paypal/disconnect", { method: "POST" });
+}
+
+export type StripeGatewayStatus = {
+  connected: boolean;
+  configured: boolean;
+  webhookConfigured: boolean;
+  mode: "connect_oauth";
+  architecture: "single_company";
+  environment: "test" | "live";
+  account: string | null;
+  accountId: string | null;
+  connectedAt: string | null;
+  lastVerifiedAt: string | null;
+  redirectUri: string | null;
+  needsAttention: boolean;
+};
+
+export async function getStripeGatewayStatus(): Promise<StripeGatewayStatus> {
+  return apiRequest<StripeGatewayStatus>("/api/settings/payment/stripe");
+}
+
+export async function startStripeConnect(): Promise<{
+  mode: "connect_oauth";
+  connected: false;
+  url: string;
+  environment: "test" | "live";
+  redirectUri: string;
+}> {
+  return apiRequest("/api/settings/payment/stripe/connect", { method: "POST" });
+}
+
+export async function testStripeGateway(): Promise<{
+  connected: boolean;
+  environment: "test" | "live";
+  verifiedAt?: string;
+  message?: string;
+}> {
+  return apiRequest("/api/settings/payment/stripe/test", { method: "POST" });
+}
+
+export async function disconnectStripeGateway(): Promise<StripeGatewayStatus> {
+  return apiRequest("/api/settings/payment/stripe/disconnect", { method: "POST" });
+}
+

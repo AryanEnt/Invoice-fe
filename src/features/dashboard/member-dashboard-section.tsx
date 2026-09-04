@@ -267,13 +267,16 @@ export function MemberDashboardSection({ user }: { user: PublicUser }) {
       >
         <ul className="divide-y divide-border">
           {attentionItems.map(({ invoice, kind }) => (
-            <li key={invoice.id} className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center">
+            <li
+              key={invoice.id}
+              className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"
+            >
               <Link href={`/invoices/${invoice.id}`} className="min-w-0 flex-1 hover:underline">
                 <p className="truncate text-sm font-medium text-foreground">{invoice.invoiceNumber}</p>
                 <p className="truncate text-xs text-muted">{invoice.customer.name}</p>
               </Link>
-              <div className="flex flex-wrap items-center gap-3 sm:justify-end">
-                <div className="text-left sm:text-right">
+              <div className="flex shrink-0 flex-wrap items-center gap-3 sm:justify-end">
+                <div className="min-w-[7.5rem] text-left sm:text-right">
                   <p className="text-sm tabular-nums text-foreground">
                     {formatMoney(invoice.balanceDue, invoice.currency)}
                   </p>
@@ -283,34 +286,38 @@ export function MemberDashboardSection({ user }: { user: PublicUser }) {
                       : `Due ${invoice.dueDate.slice(0, 10)}`}
                   </p>
                 </div>
-                <InvoiceStatusWithViewed
-                  status={
-                    kind === "not_sent" ? "NOT_SENT" : kind === "overdue" ? "OVERDUE" : invoice.status
-                  }
-                  viewedAt={invoice.viewedAt}
-                  align="end"
-                />
-                {kind === "not_sent" && canSend ? (
-                  <Button
-                    variant="secondary"
-                    disabled={sendingId === invoice.id}
-                    onClick={() => void handleSend(invoice, kind)}
-                  >
-                    {sendingId === invoice.id ? "Sending…" : "Send invoice"}
-                  </Button>
-                ) : kind === "overdue" && canSend && invoice.emailStatus === "SENT" ? (
-                  <Button
-                    variant="secondary"
-                    disabled={sendingId === invoice.id}
-                    onClick={() => void handleSend(invoice, kind)}
-                  >
-                    {sendingId === invoice.id ? "Sending…" : "Send reminder"}
-                  </Button>
-                ) : (
-                  <Link href={`/invoices/${invoice.id}`}>
-                    <Button variant="secondary">View invoice</Button>
-                  </Link>
-                )}
+                <div className="min-w-[6.5rem] sm:flex sm:justify-end">
+                  <InvoiceStatusWithViewed
+                    status={
+                      kind === "not_sent" ? "NOT_SENT" : kind === "overdue" ? "OVERDUE" : invoice.status
+                    }
+                    viewedAt={invoice.viewedAt}
+                    align="end"
+                  />
+                </div>
+                <div className="min-w-[7.5rem] sm:flex sm:justify-end">
+                  {kind === "not_sent" && canSend ? (
+                    <Button
+                      variant="secondary"
+                      disabled={sendingId === invoice.id}
+                      onClick={() => void handleSend(invoice, kind)}
+                    >
+                      {sendingId === invoice.id ? "Sending…" : "Send invoice"}
+                    </Button>
+                  ) : kind === "overdue" && canSend && invoice.emailStatus === "SENT" ? (
+                    <Button
+                      variant="secondary"
+                      disabled={sendingId === invoice.id}
+                      onClick={() => void handleSend(invoice, kind)}
+                    >
+                      {sendingId === invoice.id ? "Sending…" : "Send reminder"}
+                    </Button>
+                  ) : (
+                    <Link href={`/invoices/${invoice.id}`}>
+                      <Button variant="secondary">View invoice</Button>
+                    </Link>
+                  )}
+                </div>
               </div>
             </li>
           ))}
@@ -328,24 +335,28 @@ export function MemberDashboardSection({ user }: { user: PublicUser }) {
             <li key={invoice.id}>
               <Link
                 href={`/invoices/${invoice.id}`}
-                className="flex flex-col gap-2 px-5 py-4 hover:bg-muted-soft sm:flex-row sm:items-center sm:justify-between"
+                className="flex flex-col gap-3 px-5 py-4 hover:bg-muted-soft sm:flex-row sm:items-center sm:justify-between"
               >
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-foreground">{invoice.invoiceNumber}</p>
                   <p className="truncate text-xs text-muted">{invoice.customer.name}</p>
                 </div>
-                <div className="flex flex-wrap items-center gap-3 sm:justify-end">
-                  <span className="text-sm tabular-nums text-foreground">
-                    {formatMoney(invoice.total, invoice.currency)}
-                  </span>
-                  <InvoiceStatusWithViewed
-                    status={invoice.status}
-                    viewedAt={invoice.viewedAt}
-                    align="end"
-                  />
-                  <span className="text-xs text-muted">
-                    Sent {(invoice.sentAt ?? invoice.emailSentAt ?? invoice.createdAt).slice(0, 10)}
-                  </span>
+                <div className="flex shrink-0 flex-wrap items-center gap-3 sm:justify-end">
+                  <div className="min-w-[7.5rem] text-left sm:text-right">
+                    <p className="text-sm tabular-nums text-foreground">
+                      {formatMoney(invoice.total, invoice.currency)}
+                    </p>
+                    <p className="text-xs text-muted">
+                      Sent {(invoice.sentAt ?? invoice.emailSentAt ?? invoice.createdAt).slice(0, 10)}
+                    </p>
+                  </div>
+                  <div className="min-w-[6.5rem] sm:flex sm:justify-end">
+                    <InvoiceStatusWithViewed
+                      status={invoice.status}
+                      viewedAt={invoice.viewedAt}
+                      align="end"
+                    />
+                  </div>
                 </div>
               </Link>
             </li>
@@ -364,21 +375,23 @@ export function MemberDashboardSection({ user }: { user: PublicUser }) {
             <li key={payment.id}>
               <Link
                 href={`/invoices/${payment.invoiceId}`}
-                className="flex flex-col gap-2 px-5 py-4 hover:bg-muted-soft sm:flex-row sm:items-center sm:justify-between"
+                className="flex flex-col gap-3 px-5 py-4 hover:bg-muted-soft sm:flex-row sm:items-center sm:justify-between"
               >
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-foreground">
                     {payment.invoice.invoiceNumber}
                   </p>
                   <p className="truncate text-xs text-muted">{payment.customer.name}</p>
                 </div>
-                <div className="flex flex-wrap items-center gap-3 sm:justify-end">
-                  <span className="text-sm tabular-nums text-foreground">
-                    {formatMoney(payment.amount, payment.currency)}
-                  </span>
-                  <span className="text-xs text-muted">
-                    Paid {(payment.paidAt ?? payment.createdAt).slice(0, 10)}
-                  </span>
+                <div className="flex shrink-0 flex-wrap items-center gap-3 sm:justify-end">
+                  <div className="min-w-[7.5rem] text-left sm:text-right">
+                    <p className="text-sm tabular-nums text-foreground">
+                      {formatMoney(payment.amount, payment.currency)}
+                    </p>
+                    <p className="text-xs text-muted">
+                      Paid {(payment.paidAt ?? payment.createdAt).slice(0, 10)}
+                    </p>
+                  </div>
                 </div>
               </Link>
             </li>

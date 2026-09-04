@@ -132,6 +132,16 @@ export interface PublicInvoice {
     unitPrice: string;
     lineTotal: string;
   }>;
+  paypal?: {
+    available: boolean;
+    message: string | null;
+    lastPayment: { transactionId: string; paidAt: string; amount: string } | null;
+  };
+  stripe?: {
+    available: boolean;
+    message: string | null;
+    lastPayment: { transactionId: string; paidAt: string; amount: string } | null;
+  };
 }
 
 export interface InvoiceItemFormValues {

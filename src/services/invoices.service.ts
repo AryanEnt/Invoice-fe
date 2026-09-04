@@ -108,6 +108,44 @@ export async function getPublicInvoice(token: string): Promise<PublicInvoice> {
   return data.invoice;
 }
 
+export async function createPublicPayPalOrder(token: string): Promise<{ checkoutUrl: string }> {
+  return apiRequest<{ checkoutUrl: string }>(`/api/public/invoices/${token}/paypal/create-order`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
+export async function createPublicStripeCheckout(token: string): Promise<{ checkoutUrl: string }> {
+  return apiRequest<{ checkoutUrl: string }>(`/api/public/invoices/${token}/stripe/create-checkout`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
+export async function capturePublicPayPalOrder(
+  token: string,
+  orderId: string,
+): Promise<{
+  paid: boolean;
+  invoiceNumber: string;
+  amount: string;
+  currency: string;
+  transactionId: string | null;
+}> {
+  return apiRequest(`/api/public/invoices/${token}/paypal/capture-order`, {
+    method: "POST",
+    body: JSON.stringify({ orderId }),
+  });
+}
+
+export async function getPublicInvoicePaymentStatus(token: string): Promise<{
+  paymentStatus: string;
+  invoiceStatus: string;
+  transactionId: string | null;
+}> {
+  return apiRequest(`/api/public/invoices/${token}/payment-status`);
+}
+
 export async function duplicateInvoice(id: string): Promise<Invoice> {
   const data = await apiRequest<{ invoice: Invoice }>(`/api/invoices/${id}/duplicate`, {
     method: "POST",

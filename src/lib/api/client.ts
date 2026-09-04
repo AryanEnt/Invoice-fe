@@ -36,6 +36,11 @@ export async function apiRequest<T>(
     headers.set("Content-Type", "application/json");
   }
 
+  // Free ngrok interstitial breaks JSON API responses unless skipped.
+  if (url.includes("ngrok") && !headers.has("ngrok-skip-browser-warning")) {
+    headers.set("ngrok-skip-browser-warning", "true");
+  }
+
   const response = await fetch(url, {
     ...options,
     headers,
