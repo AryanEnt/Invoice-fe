@@ -140,7 +140,7 @@ export function AdminDashboardSection({
         <section className="rounded-2xl border border-border bg-surface px-5 py-4">
           <p className="text-sm font-medium text-foreground">Add your first member</p>
           <p className="mt-1 text-sm text-muted">
-            Members handle customers, invoices, and payments for your office. Reports will populate once
+            Members handle customers and invoices for your office. Reports will populate once
             members start working.
           </p>
           <Link href="/members" className="mt-3 inline-block text-sm font-medium text-primary hover:underline">

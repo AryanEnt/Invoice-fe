@@ -132,7 +132,7 @@ export function PaymentsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Payments"
-        description={`Record money received against invoices. ${scopeLabel}.`}
+        description={`Payments from Stripe and PayPal appear here after a customer pays. ${scopeLabel}.`}
         actions={
           canRecord && payableInvoices.length > 0 ? (
             <Button onClick={() => setPickerOpen(true)}>Record payment</Button>
@@ -226,7 +226,7 @@ export function PaymentsPage() {
       ) : !result || result.items.length === 0 ? (
         <EmptyState
           title={search || status ? "No payments match these filters" : "No payments yet"}
-          description="Record a payment after an invoice has been sent."
+          description="Payments appear here after a customer pays an invoice."
         />
       ) : (
         <DataTable

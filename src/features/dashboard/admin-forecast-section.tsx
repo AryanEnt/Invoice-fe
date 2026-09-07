@@ -112,7 +112,7 @@ export function AdminForecastSection({ currencyHint }: { currencyHint?: string }
             Not enough data to generate a forecast yet.
           </p>
           <p className="mt-1 text-sm text-muted">
-            Forecasts appear once your members create invoices or record payments.
+            Forecasts appear once your members create invoices or customers pay them.
           </p>
         </div>
       ) : forecast ? (

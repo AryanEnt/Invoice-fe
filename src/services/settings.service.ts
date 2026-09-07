@@ -114,6 +114,54 @@ export async function saveEmailTemplates(
   return data.templates;
 }
 
+export type AdminBrandingSettings = {
+  companyName: string | null;
+  companyLogoUrl: string | null;
+  hasLogo: boolean;
+  hasCustomBranding: boolean;
+  platformCompanyName: string;
+  platformLogoUrl: string | null;
+};
+
+export async function getAdminBranding(): Promise<AdminBrandingSettings> {
+  const data = await apiRequest<{ branding: AdminBrandingSettings }>("/api/settings/branding");
+  return data.branding;
+}
+
+export async function saveAdminBranding(input: {
+  companyName?: string | null;
+}): Promise<AdminBrandingSettings> {
+  const data = await apiRequest<{ branding: AdminBrandingSettings }>("/api/settings/branding", {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
+  return data.branding;
+}
+
+export async function uploadAdminBrandingLogo(file: File): Promise<AdminBrandingSettings> {
+  if (!isAllowedLogoFile(file)) {
+    throw new Error("Use a PNG, JPG, WebP, or SVG logo up to 2MB.");
+  }
+
+  const contentType = file.type === "image/jpg" ? "image/jpeg" : file.type;
+  const data = await apiRequest<{ branding: AdminBrandingSettings }>("/api/settings/branding/logo", {
+    method: "POST",
+    headers: {
+      "Content-Type": contentType,
+    },
+    body: file,
+  });
+
+  return data.branding;
+}
+
+export async function removeAdminBrandingLogo(): Promise<AdminBrandingSettings> {
+  const data = await apiRequest<{ branding: AdminBrandingSettings }>("/api/settings/branding/logo", {
+    method: "DELETE",
+  });
+  return data.branding;
+}
+
 export type PayPalGatewayStatus = {
   connected: boolean;
   configured: boolean;

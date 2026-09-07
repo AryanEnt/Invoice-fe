@@ -66,7 +66,7 @@ export function DropdownMenu({ label = "⋯", ariaLabel = "Actions", items }: Dr
         <div
           id={menuId}
           role="menu"
-          className="absolute right-0 z-20 mt-1 min-w-40 rounded-2xl border border-border bg-surface py-1"
+          className="absolute right-0 z-30 mt-1 min-w-44 overflow-hidden rounded-xl border border-border bg-surface py-1 shadow-lg"
         >
           {items.map((item) => (
             <button

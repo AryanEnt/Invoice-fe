@@ -70,7 +70,7 @@ export function RecordPaymentDialog({ invoice, onClose, onRecorded }: RecordPaym
     >
       <div className="space-y-4">
         <p className="text-sm text-muted">
-          Manual payment only. Stripe and PayPal are not connected.
+          Internal bookkeeping only. Customer payments are recorded automatically from Stripe and PayPal.
         </p>
         <div className="grid gap-3 rounded-lg bg-muted-soft p-3 text-sm sm:grid-cols-3">
           <div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { ApiError } from "@/lib/api/types";
@@ -45,6 +45,11 @@ function openCenteredPopup(name: string, width = 500, height = 700): Window | nu
     name,
     `popup=yes,width=${width},height=${height},left=${left},top=${top}`,
   );
+}
+
+/** Full browser tab (no popup features) — used for Stripe Connect only. */
+function openFullTab(name: string): Window | null {
+  return window.open("about:blank", name);
 }
 
 export function PaymentSettingsPage() {
@@ -286,17 +291,17 @@ export function PaymentSettingsPage() {
   }
 
   async function handleStripeConnect() {
-    const popup = openCenteredPopup("stripe-connect");
-    if (!popup) {
+    const tab = openFullTab("stripe-connect");
+    if (!tab) {
       setStripeUiState("error");
-      notify("Pop-up blocked. Allow pop-ups for InvoiceHub and try again.", "error");
+      notify("Tab blocked. Allow pop-ups/tabs for InvoiceHub and try again.", "error");
       return;
     }
 
-    stripePopupRef.current = popup;
+    stripePopupRef.current = tab;
     setStripeUiState("connecting");
     try {
-      popup.document.write(
+      tab.document.write(
         "<!DOCTYPE html><title>Connecting to Stripe…</title><p style='font-family:system-ui;padding:24px'>Connecting to Stripe…</p>",
       );
     } catch {
@@ -308,12 +313,12 @@ export function PaymentSettingsPage() {
       if (!result.url) {
         throw new Error("Stripe did not return a login URL.");
       }
-      if (popup.closed) {
+      if (tab.closed) {
         setStripeUiState("idle");
         clearStripePopupWatch();
         return;
       }
-      popup.location.href = result.url;
+      tab.location.href = result.url;
 
       if (stripePopupPollRef.current != null) {
         window.clearInterval(stripePopupPollRef.current);
@@ -326,7 +331,7 @@ export function PaymentSettingsPage() {
       }, 500);
     } catch (err) {
       try {
-        popup.close();
+        tab.close();
       } catch {
         /* ignore */
       }
@@ -423,205 +428,112 @@ export function PaymentSettingsPage() {
   const stripeAccountLabel =
     stripeStatus?.account ?? stripeStatus?.accountId ?? "Company Stripe account";
 
+  const connectedCount = Number(stripeConnected) + Number(paypalConnected);
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <PageHeader
         title="Payment Gateways"
-        description="Connect your company's payment provider so customers can pay invoices online."
+        description="Connect Stripe and PayPal so customers can pay invoices online. Funds settle to your company accounts."
       />
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <section className="rounded-2xl border border-border bg-surface px-5 py-5">
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#003087] text-xs font-bold text-white">
-                P
-              </span>
-              <div>
-                <h2 className="text-sm font-semibold text-foreground">PayPal</h2>
-                <p className="mt-0.5 text-xs text-muted">
-                  {paypalConnected ? (
-                    <span className="font-medium text-success">✓ Connected</span>
-                  ) : paypalUiState === "connecting" ? (
-                    <span>Connecting…</span>
-                  ) : (
-                    <span>● Not connected</span>
-                  )}
-                </p>
-              </div>
-            </div>
-            {paypalConnected ? (
-              <span className="rounded-full bg-success-soft px-2.5 py-1 text-[11px] font-medium text-success">
-                ✓ Connected
-              </span>
-            ) : null}
+      <div className="relative overflow-hidden rounded-2xl border border-border bg-surface">
+        <div
+          className="pointer-events-none absolute inset-0 opacity-[0.55]"
+          style={{
+            background:
+              "radial-gradient(ellipse 80% 60% at 0% 0%, color-mix(in srgb, #0a2540 12%, transparent), transparent 55%), radial-gradient(ellipse 70% 50% at 100% 0%, color-mix(in srgb, #003087 10%, transparent), transparent 50%)",
+          }}
+        />
+        <div className="relative flex flex-col gap-4 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted">
+              Platform checkout
+            </p>
+            <p className="mt-1 text-lg font-semibold tracking-tight text-foreground">
+              {loading
+                ? "Checking connections…"
+                : connectedCount === 2
+                  ? "Both gateways ready"
+                  : connectedCount === 1
+                    ? "One gateway connected"
+                    : "No gateways connected yet"}
+            </p>
+            <p className="mt-1 max-w-xl text-sm text-muted">
+              Super Admin connects one Stripe account and one PayPal account for the whole company.
+              Admins and members inherit these for invoice payments.
+            </p>
           </div>
-
-          <p className="mt-4 text-sm leading-relaxed text-muted">
-            {paypalConnected
-              ? "Invoice payments are processed with your company PayPal REST application. The connected login confirms the authorized Super Admin account."
-              : "Accept customer invoice payments through your company's PayPal account. Connecting opens a PayPal login window — you never enter your PayPal password in InvoiceHub."}
-          </p>
-
-          {loading ? (
-            <p className="mt-4 text-sm text-muted">Loading…</p>
-          ) : paypalConnected ? (
-            <dl className="mt-4 space-y-2 text-sm">
-              <div className="flex justify-between gap-4">
-                <dt className="text-muted">Account</dt>
-                <dd className="font-medium text-foreground">
-                  {paypalStatus?.account ?? "Company PayPal account"}
-                </dd>
-              </div>
-              {paypalEnvironmentLabel ? (
-                <div className="flex justify-between gap-4">
-                  <dt className="text-muted">Environment</dt>
-                  <dd className="font-medium text-foreground">{paypalEnvironmentLabel}</dd>
-                </div>
-              ) : null}
-              {paypalConnectedDate ? (
-                <div className="flex justify-between gap-4">
-                  <dt className="text-muted">Connected</dt>
-                  <dd className="font-medium text-foreground">{paypalConnectedDate}</dd>
-                </div>
-              ) : null}
-            </dl>
-          ) : null}
-
-          {paypalUiState === "error" && !paypalConnected ? (
-            <p className="mt-4 text-sm text-primary">
-              PayPal connection failed.{" "}
-              <button type="button" className="underline" onClick={() => void handlePayPalConnect()}>
-                Try again
-              </button>
-            </p>
-          ) : null}
-
-          {!paypalConnected && paypalStatus && !paypalStatus.configured ? (
-            <p className="mt-4 text-sm text-muted">
-              Server PayPal credentials or Return URL are not fully configured. Set{" "}
-              <code className="text-xs">PAYPAL_CLIENT_ID</code>,{" "}
-              <code className="text-xs">PAYPAL_CLIENT_SECRET</code>,{" "}
-              <code className="text-xs">PAYPAL_ENVIRONMENT</code>, and{" "}
-              <code className="text-xs">PAYPAL_REDIRECT_URI</code>.
-            </p>
-          ) : null}
-
-          <div className="mt-5 flex flex-wrap gap-2">
-            {paypalConnected ? (
-              <>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  disabled={paypalBusy}
-                  onClick={() => void handlePayPalTest()}
-                >
-                  {paypalUiState === "testing" ? "Testing…" : "Test Connection"}
-                </Button>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  disabled={paypalBusy}
-                  onClick={() => void handlePayPalDisconnect()}
-                >
-                  {paypalUiState === "disconnecting" ? "Disconnecting…" : "Disconnect"}
-                </Button>
-              </>
-            ) : (
-              <Button
-                type="button"
-                disabled={paypalBusy || (paypalStatus != null && !paypalStatus.configured)}
-                onClick={() => void handlePayPalConnect()}
-              >
-                {paypalUiState === "connecting" ? "Waiting for PayPal…" : "Connect PayPal"}
-              </Button>
-            )}
+          <div className="flex shrink-0 items-center gap-2">
+            <StatusChip
+              label="Stripe"
+              active={stripeConnected}
+              pending={stripeUiState === "connecting"}
+              loading={loading}
+            />
+            <StatusChip
+              label="PayPal"
+              active={paypalConnected}
+              pending={paypalUiState === "connecting"}
+              loading={loading}
+            />
           </div>
-        </section>
+        </div>
+      </div>
 
-        <section className="rounded-2xl border border-border bg-surface px-5 py-5">
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#635BFF] text-xs font-bold text-white">
-                S
-              </span>
-              <div>
-                <h2 className="text-sm font-semibold text-foreground">Stripe</h2>
-                <p className="mt-0.5 text-xs text-muted">
-                  {stripeConnected ? (
-                    <span className="font-medium text-success">✓ Connected</span>
-                  ) : stripeUiState === "connecting" ? (
-                    <span>Connecting…</span>
-                  ) : (
-                    <span>● Not connected</span>
-                  )}
-                </p>
-              </div>
-            </div>
-            {stripeConnected ? (
-              <span className="rounded-full bg-success-soft px-2.5 py-1 text-[11px] font-medium text-success">
-                ✓ Connected
-              </span>
-            ) : null}
-          </div>
-
-          <p className="mt-4 text-sm leading-relaxed text-muted">
-            {stripeConnected
-              ? "Invoice payments are processed through your connected Stripe account."
-              : "Connect your Stripe account to receive invoice payments through the platform."}
-          </p>
-
-          {loading ? (
-            <p className="mt-4 text-sm text-muted">Loading…</p>
-          ) : stripeConnected ? (
-            <dl className="mt-4 space-y-2 text-sm">
-              <div className="flex justify-between gap-4">
-                <dt className="text-muted">Account</dt>
-                <dd className="font-medium text-foreground">{stripeAccountLabel}</dd>
-              </div>
-              {stripeEnvironmentLabel ? (
-                <div className="flex justify-between gap-4">
-                  <dt className="text-muted">Environment</dt>
-                  <dd className="font-medium text-foreground">{stripeEnvironmentLabel}</dd>
-                </div>
-              ) : null}
-              {stripeConnectedDate ? (
-                <div className="flex justify-between gap-4">
-                  <dt className="text-muted">Connected</dt>
-                  <dd className="font-medium text-foreground">{stripeConnectedDate}</dd>
-                </div>
-              ) : null}
-            </dl>
-          ) : null}
-
-          {stripeUiState === "error" && !stripeConnected ? (
-            <p className="mt-4 text-sm text-primary">
-              Stripe connection failed.{" "}
-              <button type="button" className="underline" onClick={() => void handleStripeConnect()}>
-                Try again
-              </button>
-            </p>
-          ) : null}
-
-          {!stripeConnected && stripeStatus && !stripeStatus.configured ? (
-            <p className="mt-4 text-sm text-muted">
-              Server Stripe credentials or Return URL are not fully configured. Set{" "}
-              <code className="text-xs">STRIPE_CLIENT_ID</code>,{" "}
-              <code className="text-xs">STRIPE_SECRET_KEY</code>, and{" "}
-              <code className="text-xs">STRIPE_REDIRECT_URI</code>, then restart the API.
-            </p>
-          ) : null}
-
-          {stripeStatus?.configured && !stripeStatus.webhookConfigured ? (
-            <p className="mt-4 text-sm text-muted">
-              Connect works without a webhook. Add{" "}
-              <code className="text-xs">STRIPE_WEBHOOK_SECRET</code> later so invoice payments
-              sync automatically from Stripe.
-            </p>
-          ) : null}
-
-          <div className="mt-5 flex flex-wrap gap-2">
-            {stripeConnected ? (
+      <div className="grid gap-5 lg:grid-cols-2 lg:items-stretch">
+        {/* Stripe — left */}
+        <GatewayPanel
+          brand="stripe"
+          title="Stripe"
+          subtitle="Cards & Checkout"
+          connected={stripeConnected}
+          connecting={stripeUiState === "connecting"}
+          description={
+            stripeConnected
+              ? "Invoice card payments run through your connected Stripe account via Checkout."
+              : "Connect your Stripe account to accept card payments on public invoices."
+          }
+          loading={loading}
+          details={
+            stripeConnected ? (
+              <DetailList
+                rows={[
+                  { label: "Account", value: stripeAccountLabel },
+                  ...(stripeEnvironmentLabel
+                    ? [{ label: "Environment", value: stripeEnvironmentLabel }]
+                    : []),
+                  ...(stripeConnectedDate
+                    ? [{ label: "Connected", value: stripeConnectedDate }]
+                    : []),
+                ]}
+              />
+            ) : null
+          }
+          alert={
+            stripeUiState === "error" && !stripeConnected ? (
+              <p className="text-sm text-primary">
+                Stripe connection failed.{" "}
+                <button type="button" className="underline" onClick={() => void handleStripeConnect()}>
+                  Try again
+                </button>
+              </p>
+            ) : !stripeConnected && stripeStatus && !stripeStatus.configured ? (
+              <p className="text-sm text-muted">
+                Configure <code className="text-xs">STRIPE_CLIENT_ID</code>,{" "}
+                <code className="text-xs">STRIPE_SECRET_KEY</code>, and{" "}
+                <code className="text-xs">STRIPE_REDIRECT_URI</code>, then restart the API.
+              </p>
+            ) : stripeStatus?.configured && !stripeStatus.webhookConfigured ? (
+              <p className="text-sm text-muted">
+                Connect works without a webhook. Add{" "}
+                <code className="text-xs">STRIPE_WEBHOOK_SECRET</code> later so payments sync
+                automatically.
+              </p>
+            ) : null
+          }
+          actions={
+            stripeConnected ? (
               <>
                 <Button
                   type="button"
@@ -629,7 +541,7 @@ export function PaymentSettingsPage() {
                   disabled={stripeBusy}
                   onClick={() => void handleStripeTest()}
                 >
-                  {stripeUiState === "testing" ? "Testing…" : "Test Connection"}
+                  {stripeUiState === "testing" ? "Testing…" : "Test connection"}
                 </Button>
                 <Button
                   type="button"
@@ -648,10 +560,236 @@ export function PaymentSettingsPage() {
               >
                 {stripeUiState === "connecting" ? "Waiting for Stripe…" : "Connect Stripe"}
               </Button>
-            )}
-          </div>
-        </section>
+            )
+          }
+        />
+
+        {/* PayPal — right */}
+        <GatewayPanel
+          brand="paypal"
+          title="PayPal"
+          subtitle="Wallet & checkout"
+          connected={paypalConnected}
+          connecting={paypalUiState === "connecting"}
+          description={
+            paypalConnected
+              ? "Invoice payments use your company PayPal REST app. The connected login confirms the authorized Super Admin."
+              : "Accept PayPal on invoices. Connecting opens a PayPal login window — you never enter your password in InvoiceHub."
+          }
+          loading={loading}
+          details={
+            paypalConnected ? (
+              <DetailList
+                rows={[
+                  {
+                    label: "Account",
+                    value: paypalStatus?.account ?? "Company PayPal account",
+                  },
+                  ...(paypalEnvironmentLabel
+                    ? [{ label: "Environment", value: paypalEnvironmentLabel }]
+                    : []),
+                  ...(paypalConnectedDate
+                    ? [{ label: "Connected", value: paypalConnectedDate }]
+                    : []),
+                ]}
+              />
+            ) : null
+          }
+          alert={
+            paypalUiState === "error" && !paypalConnected ? (
+              <p className="text-sm text-primary">
+                PayPal connection failed.{" "}
+                <button type="button" className="underline" onClick={() => void handlePayPalConnect()}>
+                  Try again
+                </button>
+              </p>
+            ) : !paypalConnected && paypalStatus && !paypalStatus.configured ? (
+              <p className="text-sm text-muted">
+                Configure <code className="text-xs">PAYPAL_CLIENT_ID</code>,{" "}
+                <code className="text-xs">PAYPAL_CLIENT_SECRET</code>,{" "}
+                <code className="text-xs">PAYPAL_ENVIRONMENT</code>, and{" "}
+                <code className="text-xs">PAYPAL_REDIRECT_URI</code>.
+              </p>
+            ) : null
+          }
+          actions={
+            paypalConnected ? (
+              <>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={paypalBusy}
+                  onClick={() => void handlePayPalTest()}
+                >
+                  {paypalUiState === "testing" ? "Testing…" : "Test connection"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={paypalBusy}
+                  onClick={() => void handlePayPalDisconnect()}
+                >
+                  {paypalUiState === "disconnecting" ? "Disconnecting…" : "Disconnect"}
+                </Button>
+              </>
+            ) : (
+              <Button
+                type="button"
+                disabled={paypalBusy || (paypalStatus != null && !paypalStatus.configured)}
+                onClick={() => void handlePayPalConnect()}
+              >
+                {paypalUiState === "connecting" ? "Waiting for PayPal…" : "Connect PayPal"}
+              </Button>
+            )
+          }
+        />
       </div>
     </div>
+  );
+}
+
+function StatusChip({
+  label,
+  active,
+  pending,
+  loading,
+}: {
+  label: string;
+  active: boolean;
+  pending: boolean;
+  loading: boolean;
+}) {
+  const tone = loading
+    ? "border-border bg-muted-soft text-muted"
+    : active
+      ? "border-success/25 bg-success-soft text-success"
+      : pending
+        ? "border-warning/25 bg-warning-soft text-warning"
+        : "border-border bg-muted-soft text-muted";
+
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium ${tone}`}
+    >
+      <span
+        className={`h-1.5 w-1.5 rounded-full ${
+          loading
+            ? "bg-muted"
+            : active
+              ? "bg-success"
+              : pending
+                ? "bg-warning"
+                : "bg-muted"
+        }`}
+        aria-hidden
+      />
+      {label}
+      {loading ? "" : active ? " · On" : pending ? " · …" : " · Off"}
+    </span>
+  );
+}
+
+function DetailList({ rows }: { rows: Array<{ label: string; value: string }> }) {
+  return (
+    <dl className="divide-y divide-border rounded-xl border border-border bg-muted-soft/30">
+      {rows.map((row) => (
+        <div key={row.label} className="flex items-baseline justify-between gap-4 px-3.5 py-2.5 text-sm">
+          <dt className="text-muted">{row.label}</dt>
+          <dd className="truncate text-right font-medium text-foreground">{row.value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function GatewayPanel({
+  brand,
+  title,
+  subtitle,
+  connected,
+  connecting,
+  description,
+  loading,
+  details,
+  alert,
+  actions,
+}: {
+  brand: "stripe" | "paypal";
+  title: string;
+  subtitle: string;
+  connected: boolean;
+  connecting: boolean;
+  description: string;
+  loading: boolean;
+  details: ReactNode;
+  alert: ReactNode;
+  actions: ReactNode;
+}) {
+  const isStripe = brand === "stripe";
+  const accent = isStripe
+    ? {
+        bar: "from-[#0a2540] to-[#3d4f5f]",
+        mark: "bg-[#0a2540] text-white",
+        wash: "bg-[radial-gradient(ellipse_at_top_left,_rgba(10,37,64,0.08),_transparent_55%)]",
+      }
+    : {
+        bar: "from-[#003087] to-[#009cde]",
+        mark: "bg-[#003087] text-white",
+        wash: "bg-[radial-gradient(ellipse_at_top_right,_rgba(0,48,135,0.08),_transparent_55%)]",
+      };
+
+  return (
+    <section className="relative flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-surface transition-colors hover:border-foreground/15">
+      <div className={`h-1 w-full bg-gradient-to-r ${accent.bar}`} />
+      <div className={`relative flex flex-1 flex-col px-5 py-5 sm:px-6 ${accent.wash}`}>
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <span
+              className={`flex h-11 w-11 items-center justify-center rounded-xl text-sm font-semibold tracking-tight shadow-sm ${accent.mark}`}
+              aria-hidden
+            >
+              {isStripe ? (
+                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor">
+                  <path d="M13.976 9.15c-2.172-.806-3.356-1.426-3.356-2.409 0-.831.683-1.305 1.901-1.305 2.227 0 4.515.858 6.09 1.631l.89-5.494C18.252.454 15.697 0 12.165 0 9.667 0 7.589.654 6.104 1.872 4.56 3.14 3.757 4.992 3.757 7.218c0 4.039 2.467 5.76 6.476 7.219 2.585.92 3.445 1.574 3.445 2.583 0 .98-.84 1.546-2.354 1.546-1.875 0-4.965-.921-6.99-2.109l-.9 5.555C5.175 22.99 8.385 24 11.714 24c2.641 0 4.843-.624 6.328-1.813 1.664-1.305 2.525-3.236 2.525-5.732 0-4.128-2.524-5.851-6.591-7.305z" />
+                </svg>
+              ) : (
+                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor">
+                  <path d="M20.067 8.478c.492.88.556 2.014.3 3.327-.74 3.597-3.146 5.187-6.988 5.187h-.5a.805.805 0 0 0-.794.68l-.04.22-.63 3.993-.028.152a.805.805 0 0 1-.794.68H7.72a.483.483 0 0 1-.477-.558L9.462 6.21a.96.96 0 0 1 .95-.812h5.286c1.354 0 2.428.28 3.214.86.7.514 1.122 1.247 1.155 2.22zM7.154 21.53l.8-5.07v.002c.06-.377.38-.652.76-.652h1.027c3.392 0 5.98-1.378 6.74-5.36.08-.41.12-.78.12-1.11-.54.34-1.24.55-2.12.55H9.38a.96.96 0 0 0-.948.81L7.154 21.53z" />
+                </svg>
+              )}
+            </span>
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-base font-semibold tracking-tight text-foreground">{title}</h2>
+                <span className="text-xs text-muted">{subtitle}</span>
+              </div>
+              <p className="mt-0.5 text-xs text-muted">
+                {connected ? (
+                  <span className="font-medium text-success">Connected</span>
+                ) : connecting ? (
+                  <span className="font-medium text-warning">Connecting…</span>
+                ) : (
+                  <span>Not connected</span>
+                )}
+              </p>
+            </div>
+          </div>
+          {connected ? (
+            <span className="rounded-md border border-success/20 bg-success-soft px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-success">
+              Live link
+            </span>
+          ) : null}
+        </div>
+
+        <p className="mt-4 text-sm leading-relaxed text-muted">{description}</p>
+
+        <div className="mt-4 flex-1 space-y-3">
+          {loading ? <p className="text-sm text-muted">Loading status…</p> : details}
+          {alert}
+        </div>
+
+        <div className="mt-6 flex flex-wrap gap-2 border-t border-border pt-4">{actions}</div>
+      </div>
+    </section>
   );
 }

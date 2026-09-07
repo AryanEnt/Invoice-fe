@@ -18,6 +18,7 @@ import {
   uploadOrganizationLogo,
   type OrganizationSettings,
 } from "@/services/settings.service";
+import { AdminBrandingSection } from "@/features/settings/admin-branding-section";
 
 export function SettingsPage() {
   const { user, loading } = useAuth();
@@ -202,6 +203,8 @@ export function SettingsPage() {
           </div>
         </section>
       ) : null}
+
+      {user.role === "ADMIN" ? <AdminBrandingSection /> : null}
 
       {user.role === "ADMIN" ? (
         <section className="rounded-2xl border border-border bg-surface px-5 py-4">

@@ -3,9 +3,8 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActionGroup, CopyLinkAction, EditAction, SendEmailAction } from "@/components/ui/action-buttons";
 import { Button } from "@/components/ui/button";
-import { ClickableRow, DataTable, Table, Td, Th, THead } from "@/components/ui/data-table";
+import { DataTable, Table, Td, Th, THead } from "@/components/ui/data-table";
 import { Dialog } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
@@ -13,10 +12,17 @@ import { Field, SelectInput, TextInput } from "@/components/ui/field";
 import { PageHeader } from "@/components/ui/page-header";
 import { Pagination } from "@/components/ui/pagination";
 import { TableSkeleton } from "@/components/ui/skeleton";
-import { StatusBadge, statusLabel } from "@/components/ui/status-badge";
-import { InvoiceStatusWithViewed } from "@/components/ui/invoice-status-with-viewed";
+import { statusLabel } from "@/components/ui/status-badge";
+import { InvoiceActivityCell } from "@/features/invoices/invoice-activity-cell";
+import {
+  customerInitials,
+  formatInvoiceDay,
+  invoiceEmailAt,
+} from "@/features/invoices/invoice-activity";
 import { InvoiceBoard, type InvoiceBoardColumnId } from "@/features/invoices/invoice-board";
-import { StatCard } from "@/features/dashboard/stat-card";
+import { InvoiceQuickDrawer } from "@/features/invoices/invoice-quick-drawer";
+import { InvoiceRowActions } from "@/features/invoices/invoice-row-actions";
+import { InvoiceStatusPill } from "@/features/invoices/invoice-status-pill";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { cn } from "@/lib/cn";
 import { copyText } from "@/lib/copy-text";
@@ -35,11 +41,23 @@ import { useWorkspace } from "@/providers/workspace-provider";
 import { listCustomers } from "@/services/customers.service";
 import { listAdmins } from "@/services/admins.service";
 import { listAllMembers } from "@/services/members.service";
-import { getInvoiceShareLink, getInvoiceSummary, listInvoices, sendInvoice } from "@/services/invoices.service";
+import {
+  deleteInvoice,
+  getInvoiceShareLink,
+  getInvoiceSummary,
+  listInvoices,
+  sendInvoice,
+} from "@/services/invoices.service";
 import type { AdminUser } from "@/types/admin";
 import type { Customer } from "@/types/catalog";
 import type { MemberUser } from "@/types/member";
-import type { Invoice, InvoiceListResult, InvoiceStatus, InvoiceSummary } from "@/types/invoice";
+import type {
+  Invoice,
+  InvoiceEmailStatus,
+  InvoiceListResult,
+  InvoiceStatus,
+  InvoiceSummary,
+} from "@/types/invoice";
 
 const statuses: InvoiceStatus[] = [
   "DRAFT",
@@ -54,11 +72,11 @@ const statuses: InvoiceStatus[] = [
 const VIEW_STORAGE_KEY = "outinvoice.invoices.view";
 
 type InvoiceViewMode = "list" | "board";
+/** Email/activity filter: includes Viewed (viewedAt set). */
+type ActivityFilter = "" | InvoiceEmailStatus | "VIEWED";
 
 function readStoredView(): InvoiceViewMode {
-  if (typeof window === "undefined") {
-    return "list";
-  }
+  if (typeof window === "undefined") return "list";
   return window.sessionStorage.getItem(VIEW_STORAGE_KEY) === "board" ? "board" : "list";
 }
 
@@ -69,8 +87,8 @@ export function InvoicesPage() {
   const canCreate = hasPermission(user, "INVOICES_CREATE");
   const canUpdate = hasPermission(user, "INVOICES_UPDATE");
   const canSend = hasPermission(user, "INVOICES_SEND");
+  const canDelete = hasPermission(user, "INVOICES_DELETE");
   const canViewCustomers = hasPermission(user, "CUSTOMERS_VIEW");
-  const isMember = user?.role === "MEMBER";
   const isSuperAdmin = user?.role === "SUPER_ADMIN";
   const isAdmin = user?.role === "ADMIN";
   const canFilterByMember = isSuperAdmin || isAdmin;
@@ -89,6 +107,7 @@ export function InvoicesPage() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<InvoiceStatus | "">("");
+  const [activityFilter, setActivityFilter] = useState<ActivityFilter>("");
   const [customerId, setCustomerId] = useState("");
   const [administratorId, setAdministratorId] = useState("");
   const [assignedMemberId, setAssignedMemberId] = useState("");
@@ -103,6 +122,9 @@ export function InvoicesPage() {
   const [emailBusy, setEmailBusy] = useState(false);
   const [copyBusyId, setCopyBusyId] = useState<string | null>(null);
   const [sendingId, setSendingId] = useState<string | null>(null);
+  const [drawerInvoice, setDrawerInvoice] = useState<Invoice | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Invoice | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const debouncedSearch = useDebouncedValue(search);
 
   const dateBounds = useMemo(
@@ -124,6 +146,7 @@ export function InvoicesPage() {
 
   const activeFilterCount = [
     status,
+    activityFilter,
     customerId,
     administratorId,
     assignedMemberId,
@@ -140,14 +163,10 @@ export function InvoicesPage() {
     let cancelled = false;
     void listAdmins({ page: 1, pageSize: 50 })
       .then((admins) => {
-        if (!cancelled) {
-          setAdministrators(admins.items);
-        }
+        if (!cancelled) setAdministrators(admins.items);
       })
       .catch(() => {
-        if (!cancelled) {
-          setAdministrators([]);
-        }
+        if (!cancelled) setAdministrators([]);
       });
     return () => {
       cancelled = true;
@@ -173,9 +192,7 @@ export function InvoicesPage() {
         }
       })
       .catch(() => {
-        if (!cancelled) {
-          setMembers([]);
-        }
+        if (!cancelled) setMembers([]);
       });
     return () => {
       cancelled = true;
@@ -189,14 +206,10 @@ export function InvoicesPage() {
 
   const loadList = useCallback(async () => {
     if (!tenantListsReady || view !== "list") {
-      if (view !== "list") {
-        setLoading(false);
-      }
+      if (view !== "list") setLoading(false);
       return;
     }
-    if (datePreset === "custom" && (!customFrom || !customTo)) {
-      return;
-    }
+    if (datePreset === "custom" && (!customFrom || !customTo)) return;
 
     const requestId = ++requestIdRef.current;
     setLoading(true);
@@ -218,28 +231,19 @@ export function InvoicesPage() {
           pageSize: 10,
         }),
         canViewCustomers
-          ? listCustomers({
-              pageSize: 50,
-              organizationId: organizationId || undefined,
-            })
+          ? listCustomers({ pageSize: 50, organizationId: organizationId || undefined })
           : Promise.resolve({ items: [] as Customer[] }),
-        isMember ? getInvoiceSummary() : Promise.resolve(null),
+        getInvoiceSummary(),
       ]);
-      if (requestId !== requestIdRef.current) {
-        return;
-      }
+      if (requestId !== requestIdRef.current) return;
       setResult(invoices);
       setCustomers(customerResult.items);
       setSummary(summaryResult);
     } catch (err) {
-      if (requestId !== requestIdRef.current) {
-        return;
-      }
+      if (requestId !== requestIdRef.current) return;
       setError(err instanceof ApiError ? err.message : "We couldn't load your invoices.");
     } finally {
-      if (requestId === requestIdRef.current) {
-        setLoading(false);
-      }
+      if (requestId === requestIdRef.current) setLoading(false);
     }
   }, [
     administratorId,
@@ -251,11 +255,9 @@ export function InvoicesPage() {
     dateBounds.dateTo,
     datePreset,
     debouncedSearch,
-    isAdmin,
-    isMember,
-    isSuperAdmin,
     canFilterByMember,
     canViewCustomers,
+    isSuperAdmin,
     organizationId,
     page,
     sort,
@@ -268,9 +270,7 @@ export function InvoicesPage() {
   useEffect(() => {
     let cancelled = false;
     const timer = window.setTimeout(() => {
-      if (!cancelled) {
-        void loadList();
-      }
+      if (!cancelled) void loadList();
     }, 0);
     return () => {
       cancelled = true;
@@ -279,27 +279,22 @@ export function InvoicesPage() {
   }, [loadList]);
 
   useEffect(() => {
-    if (!isMember || !tenantListsReady) {
-      return;
-    }
+    if (!tenantListsReady || view !== "board") return;
     let cancelled = false;
     void getInvoiceSummary()
       .then((summaryResult) => {
-        if (!cancelled) {
-          setSummary(summaryResult);
-        }
+        if (!cancelled) setSummary(summaryResult);
       })
-      .catch(() => {
-        // Board view can still render without summary cards.
-      });
+      .catch(() => undefined);
     return () => {
       cancelled = true;
     };
-  }, [isMember, tenantListsReady, view]);
+  }, [tenantListsReady, view]);
 
   function clearFilters() {
     setSearch("");
     setStatus("");
+    setActivityFilter("");
     setCustomerId("");
     setAdministratorId("");
     setAssignedMemberId("");
@@ -332,27 +327,21 @@ export function InvoicesPage() {
   }
 
   async function handleSendEmail() {
-    if (!emailTarget) {
-      return;
-    }
+    if (!emailTarget) return;
     setEmailBusy(true);
     setSendingId(emailTarget.id);
     try {
       const updated = await sendInvoice(emailTarget.id);
       setResult((current) =>
         current
-          ? {
-              ...current,
-              items: current.items.map((item) => (item.id === updated.id ? updated : item)),
-            }
+          ? { ...current, items: current.items.map((item) => (item.id === updated.id ? updated : item)) }
           : current,
       );
-      if (isMember) {
-        try {
-          setSummary(await getInvoiceSummary());
-        } catch {
-          // List already updated; summary refresh is best-effort.
-        }
+      setDrawerInvoice((current) => (current?.id === updated.id ? updated : current));
+      try {
+        setSummary(await getInvoiceSummary());
+      } catch {
+        /* best-effort */
       }
       setEmailTarget(null);
       notify("Invoice sent successfully");
@@ -368,85 +357,112 @@ export function InvoicesPage() {
             }
           : current,
       );
+      setDrawerInvoice((current) =>
+        current?.id === emailTarget.id ? { ...current, emailStatus: "FAILED" } : current,
+      );
     } finally {
       setEmailBusy(false);
       setSendingId(null);
     }
   }
 
+  async function handleDelete() {
+    if (!deleteTarget) return;
+    setDeleteBusy(true);
+    try {
+      await deleteInvoice(deleteTarget.id);
+      setResult((current) =>
+        current
+          ? {
+              ...current,
+              items: current.items.filter((item) => item.id !== deleteTarget.id),
+              total: Math.max(0, current.total - 1),
+            }
+          : current,
+      );
+      if (drawerInvoice?.id === deleteTarget.id) setDrawerInvoice(null);
+      setDeleteTarget(null);
+      notify("Invoice deleted");
+      try {
+        setSummary(await getInvoiceSummary());
+      } catch {
+        /* best-effort */
+      }
+    } catch (err) {
+      notify(err instanceof ApiError ? err.message : "Unable to delete invoice.", "error");
+    } finally {
+      setDeleteBusy(false);
+    }
+  }
+
   const boardReady =
-    tenantListsReady &&
-    (datePreset !== "custom" || Boolean(customFrom && customTo));
+    tenantListsReady && (datePreset !== "custom" || Boolean(customFrom && customTo));
+
+  const visibleItems = useMemo(() => {
+    if (!result) return [];
+    if (!activityFilter) return result.items;
+    return result.items.filter((invoice) => {
+      if (activityFilter === "VIEWED") return Boolean(invoice.viewedAt);
+      if (activityFilter === "SENT") {
+        return invoice.emailStatus === "SENT" || Boolean(invoiceEmailAt(invoice));
+      }
+      return invoice.emailStatus === activityFilter;
+    });
+  }, [activityFilter, result]);
+
+  const pageFrom = result ? (result.page - 1) * result.pageSize + (visibleItems.length ? 1 : 0) : 0;
+  const pageTo = result ? (result.page - 1) * result.pageSize + visibleItems.length : 0;
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Invoices"
-        description={
-          isSuperAdmin
-            ? `View all company invoices by list or board. Filter by team or member. ${scopeLabel}.`
-            : isAdmin
-              ? `View your team's invoices by list or board. Filter by member. ${scopeLabel}.`
-              : canCreate
-                ? `Create, send, and track invoices. ${scopeLabel}.`
-                : `Inspect invoices for ${scopeLabel}. Editing is limited to operations members.`
-        }
+        description="Manage invoices, track customer activity, and monitor payments."
         actions={
-          canCreate && isMember ? (
-            <Link href="/invoices/new">
-              <Button>Create invoice</Button>
-            </Link>
-          ) : undefined
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="inline-flex rounded-lg border border-border bg-surface p-0.5">
+              <button
+                type="button"
+                className={cn(
+                  "rounded-md px-3 py-1.5 text-sm font-medium transition",
+                  view === "list" ? "bg-muted-soft text-foreground" : "text-muted hover:text-foreground",
+                )}
+                onClick={() => changeView("list")}
+              >
+                List
+              </button>
+              <button
+                type="button"
+                className={cn(
+                  "rounded-md px-3 py-1.5 text-sm font-medium transition",
+                  view === "board" ? "bg-muted-soft text-foreground" : "text-muted hover:text-foreground",
+                )}
+                onClick={() => changeView("board")}
+              >
+                Board
+              </button>
+            </div>
+            {canCreate ? (
+              <Link href="/invoices/new">
+                <Button>+ Create Invoice</Button>
+              </Link>
+            ) : null}
+          </div>
         }
       />
 
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="inline-flex rounded-full border border-border bg-surface p-1">
-          <button
-            type="button"
-            className={cn(
-              "rounded-full px-3 py-1.5 text-sm font-medium transition",
-              view === "list" ? "bg-primary-soft text-primary" : "text-muted hover:text-foreground",
-            )}
-            onClick={() => changeView("list")}
-          >
-            List
-          </button>
-          <button
-            type="button"
-            className={cn(
-              "rounded-full px-3 py-1.5 text-sm font-medium transition",
-              view === "board" ? "bg-primary-soft text-primary" : "text-muted hover:text-foreground",
-            )}
-            onClick={() => changeView("board")}
-          >
-            Board
-          </button>
-        </div>
-      </div>
-
-      {isMember ? (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-          <StatCard label="All Invoices" value={String(summary?.all ?? 0)} />
-          <StatCard label="Paid Invoices" value={String(summary?.paid ?? 0)} tone="success" />
-          <StatCard
-            label="Outstanding"
-            value={String(summary?.outstanding ?? 0)}
-            tone="warning"
-            hint="Sent, viewed, overdue, or partially paid"
-          />
-          <StatCard
-            label="Overview"
-            value={String(summary?.overview ?? 0)}
-            hint="Drafts and overdue needing attention"
-          />
-          <StatCard label="Void" value={String(summary?.void ?? 0)} />
+      {summary ? (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <Metric label="Total" value={summary.all} />
+          <Metric label="Draft" value={summary.notSent.count} />
+          <Metric label="Outstanding" value={summary.outstanding} />
+          <Metric label="Paid" value={summary.paidInvoices.count} tone="success" />
         </div>
       ) : null}
 
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
-        <div className="flex-1">
-          <Field label="Search" htmlFor="invoice-search">
+      <div className="rounded-2xl border border-border bg-surface px-4 py-3.5">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+          <div className="min-w-0 flex-1">
             <TextInput
               id="invoice-search"
               value={search}
@@ -454,62 +470,49 @@ export function InvoicesPage() {
                 setSearch(event.target.value);
                 setPage(1);
               }}
-              placeholder="Search invoices..."
+              placeholder="Search invoices or customers..."
+              aria-label="Search invoices or customers"
             />
-          </Field>
-        </div>
-        {canFilterByMember ? (
-          <>
-            {isSuperAdmin ? (
-              <div className="w-full sm:w-52">
-                <Field label="Team (Administrator)" htmlFor="invoice-admin-filter">
-                  <SelectInput
-                    id="invoice-admin-filter"
-                    value={administratorId}
-                    onChange={(event) => {
-                      setAdministratorId(event.target.value);
-                      setAssignedMemberId("");
-                      setPage(1);
-                    }}
-                  >
-                    <option value="">All teams</option>
-                    {administrators.map((admin) => (
-                      <option key={admin.id} value={admin.id}>
-                        {admin.firstName} {admin.lastName}
-                      </option>
-                    ))}
-                  </SelectInput>
-                </Field>
-              </div>
-            ) : null}
-            <div className="w-full sm:w-52">
-              <Field label="Member" htmlFor="invoice-member-filter">
-                <SelectInput
-                  id="invoice-member-filter"
-                  value={assignedMemberId}
-                  onChange={(event) => {
-                    setAssignedMemberId(event.target.value);
-                    setPage(1);
-                  }}
-                >
-                  <option value="">
-                    {isSuperAdmin && administratorId ? "All team members" : "All members"}
-                  </option>
-                  {members.map((member) => (
-                    <option key={member.id} value={member.id}>
-                      {member.firstName} {member.lastName}
-                    </option>
-                  ))}
-                </SelectInput>
-              </Field>
-            </div>
-          </>
-        ) : null}
-        <div className="w-full sm:w-48">
-          <Field label="Date range" htmlFor="invoice-date-preset">
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <SelectInput
+              id="invoice-status"
+              className="w-[8.5rem]"
+              value={status}
+              aria-label="Status filter"
+              onChange={(event) => {
+                setStatus(event.target.value as InvoiceStatus | "");
+                setPage(1);
+              }}
+            >
+              <option value="">Status</option>
+              {statuses.map((value) => (
+                <option key={value} value={value}>
+                  {statusLabel(value)}
+                </option>
+              ))}
+            </SelectInput>
+            <SelectInput
+              id="invoice-activity-filter"
+              className="w-[8.5rem]"
+              value={activityFilter}
+              aria-label="Email activity filter"
+              onChange={(event) => {
+                setActivityFilter(event.target.value as ActivityFilter);
+                setPage(1);
+              }}
+            >
+              <option value="">Email</option>
+              <option value="NOT_SENT">Not Sent</option>
+              <option value="SENT">Sent</option>
+              <option value="VIEWED">Viewed</option>
+              <option value="FAILED">Failed</option>
+            </SelectInput>
             <SelectInput
               id="invoice-date-preset"
+              className="w-[9.5rem]"
               value={datePreset}
+              aria-label="Date filter"
               onChange={(event) => {
                 setDatePreset(event.target.value as InvoiceDatePreset);
                 setPage(1);
@@ -521,115 +524,135 @@ export function InvoicesPage() {
                 </option>
               ))}
             </SelectInput>
-          </Field>
+            <Button variant="secondary" size="sm" onClick={() => setFiltersOpen((open) => !open)}>
+              Filters{activeFilterCount ? ` (${activeFilterCount})` : ""}
+            </Button>
+            {hasFilters ? (
+              <Button variant="ghost" size="sm" onClick={clearFilters}>
+                Clear
+              </Button>
+            ) : null}
+          </div>
         </div>
-        {view === "list" ? (
-          <Button variant="secondary" onClick={() => setFiltersOpen((open) => !open)}>
-            Filters{activeFilterCount ? ` (${activeFilterCount})` : ""}
-          </Button>
-        ) : null}
-        {hasFilters ? (
-          <Button variant="ghost" onClick={clearFilters}>
-            Clear all
-          </Button>
-        ) : null}
-      </div>
 
-      {datePreset === "custom" ? (
-        <div className="grid gap-3 rounded-2xl border border-border bg-surface p-4 sm:grid-cols-2">
-          <Field label="From" htmlFor="invoice-custom-from" required>
-            <TextInput
-              id="invoice-custom-from"
-              type="date"
-              value={customFrom}
-              onChange={(event) => {
-                setCustomFrom(event.target.value);
-                setPage(1);
-              }}
-              required
-            />
-          </Field>
-          <Field label="To" htmlFor="invoice-custom-to" required>
-            <TextInput
-              id="invoice-custom-to"
-              type="date"
-              value={customTo}
-              onChange={(event) => {
-                setCustomTo(event.target.value);
-                setPage(1);
-              }}
-              required
-            />
-          </Field>
-        </div>
-      ) : null}
-
-      {view === "list" && filtersOpen ? (
-        <div className="grid gap-3 rounded-2xl border border-border bg-surface p-4 md:grid-cols-3 xl:grid-cols-4">
-          <Field label="Status" htmlFor="invoice-status">
-            <SelectInput
-              id="invoice-status"
-              value={status}
-              onChange={(event) => {
-                setStatus(event.target.value as InvoiceStatus | "");
-                setPage(1);
-              }}
-            >
-              <option value="">All statuses</option>
-              {statuses.map((value) => (
-                <option key={value} value={value}>
-                  {statusLabel(value)}
-                </option>
-              ))}
-            </SelectInput>
-          </Field>
-          {canViewCustomers ? (
-            <Field label="Customer" htmlFor="invoice-customer-filter">
-              <SelectInput
-                id="invoice-customer-filter"
-                value={customerId}
+        {datePreset === "custom" ? (
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <Field label="From" htmlFor="invoice-custom-from" required>
+              <TextInput
+                id="invoice-custom-from"
+                type="date"
+                value={customFrom}
                 onChange={(event) => {
-                  setCustomerId(event.target.value);
+                  setCustomFrom(event.target.value);
                   setPage(1);
                 }}
+                required
+              />
+            </Field>
+            <Field label="To" htmlFor="invoice-custom-to" required>
+              <TextInput
+                id="invoice-custom-to"
+                type="date"
+                value={customTo}
+                onChange={(event) => {
+                  setCustomTo(event.target.value);
+                  setPage(1);
+                }}
+                required
+              />
+            </Field>
+          </div>
+        ) : null}
+
+        {filtersOpen ? (
+          <div className="mt-3 grid gap-3 border-t border-border pt-3 md:grid-cols-3 xl:grid-cols-4">
+            {canFilterByMember ? (
+              <>
+                {isSuperAdmin ? (
+                  <Field label="Team" htmlFor="invoice-admin-filter">
+                    <SelectInput
+                      id="invoice-admin-filter"
+                      value={administratorId}
+                      onChange={(event) => {
+                        setAdministratorId(event.target.value);
+                        setAssignedMemberId("");
+                        setPage(1);
+                      }}
+                    >
+                      <option value="">All teams</option>
+                      {administrators.map((admin) => (
+                        <option key={admin.id} value={admin.id}>
+                          {admin.firstName} {admin.lastName}
+                        </option>
+                      ))}
+                    </SelectInput>
+                  </Field>
+                ) : null}
+                <Field label="Member" htmlFor="invoice-member-filter">
+                  <SelectInput
+                    id="invoice-member-filter"
+                    value={assignedMemberId}
+                    onChange={(event) => {
+                      setAssignedMemberId(event.target.value);
+                      setPage(1);
+                    }}
+                  >
+                    <option value="">All members</option>
+                    {members.map((member) => (
+                      <option key={member.id} value={member.id}>
+                        {member.firstName} {member.lastName}
+                      </option>
+                    ))}
+                  </SelectInput>
+                </Field>
+              </>
+            ) : null}
+            {canViewCustomers ? (
+              <Field label="Customer" htmlFor="invoice-customer-filter">
+                <SelectInput
+                  id="invoice-customer-filter"
+                  value={customerId}
+                  onChange={(event) => {
+                    setCustomerId(event.target.value);
+                    setPage(1);
+                  }}
+                >
+                  <option value="">All customers</option>
+                  {customers.map((customer) => (
+                    <option key={customer.id} value={customer.id}>
+                      {customer.name}
+                    </option>
+                  ))}
+                </SelectInput>
+              </Field>
+            ) : null}
+            <Field label="Sort" htmlFor="invoice-sort">
+              <SelectInput
+                id="invoice-sort"
+                value={`${sort}:${sortDir}`}
+                onChange={(event) => {
+                  const [nextSort, nextDir] = event.target.value.split(":");
+                  setSort(nextSort);
+                  setSortDir(nextDir as "asc" | "desc");
+                }}
               >
-                <option value="">All customers</option>
-                {customers.map((customer) => (
-                  <option key={customer.id} value={customer.id}>
-                    {customer.name}
-                  </option>
-                ))}
+                <option value="createdAt:desc">Newest first</option>
+                <option value="createdAt:asc">Oldest first</option>
+                <option value="dueDate:asc">Due date</option>
+                <option value="total:desc">Highest total</option>
+                <option value="invoiceNumber:asc">Invoice number</option>
               </SelectInput>
             </Field>
-          ) : null}
-          <Field label="Sort" htmlFor="invoice-sort">
-            <SelectInput
-              id="invoice-sort"
-              value={`${sort}:${sortDir}`}
-              onChange={(event) => {
-                const [nextSort, nextDir] = event.target.value.split(":");
-                setSort(nextSort);
-                setSortDir(nextDir as "asc" | "desc");
-              }}
-            >
-              <option value="createdAt:desc">Newest first</option>
-              <option value="createdAt:asc">Oldest first</option>
-              <option value="dueDate:asc">Due date</option>
-              <option value="total:desc">Highest total</option>
-              <option value="invoiceNumber:asc">Invoice number</option>
-            </SelectInput>
-          </Field>
-        </div>
-      ) : null}
+          </div>
+        ) : null}
+        {scopeLabel ? <p className="mt-2 text-xs text-muted">{scopeLabel}</p> : null}
+      </div>
 
       {view === "board" ? (
         !tenantListsReady ? (
           <p className="text-sm text-muted">Loading invoices…</p>
         ) : datePreset === "custom" && (!customFrom || !customTo) ? (
-          <EmptyState
-            title="Choose a custom range"
-            description="Pick From and To dates to load the board."
-          />
+          <EmptyState title="Choose a custom range" description="Pick From and To dates to load the board." />
         ) : (
           <InvoiceBoard
             search={debouncedSearch || undefined}
@@ -644,16 +667,16 @@ export function InvoicesPage() {
           />
         )
       ) : loading && !result ? (
-        <TableSkeleton cols={5} />
+        <TableSkeleton cols={6} />
       ) : error && !result ? (
         <ErrorState title="We couldn't load your invoices." message={error} onRetry={() => void loadList()} />
-      ) : !result || result.items.length === 0 ? (
+      ) : !result || visibleItems.length === 0 ? (
         <EmptyState
           title={hasFilters ? "No invoices match these filters" : "No invoices yet"}
           description={
             hasFilters
               ? "Try a different search or clear the filters."
-              : "Create your first invoice to start tracking billing."
+              : "Create your first invoice to start tracking customer payments and activity."
           }
           action={
             hasFilters ? (
@@ -662,84 +685,184 @@ export function InvoicesPage() {
               </Button>
             ) : canCreate ? (
               <Link href="/invoices/new">
-                <Button>Create invoice</Button>
+                <Button>+ Create Invoice</Button>
               </Link>
             ) : null
           }
         />
       ) : (
-        <DataTable
-          footer={<Pagination page={result.page} totalPages={result.totalPages} onPageChange={setPage} />}
-        >
-          <Table>
-            <THead>
-              <tr>
-                <Th>Invoice</Th>
-                <Th>Customer</Th>
-                <Th>Date</Th>
-                <Th>Due date</Th>
-                <Th>Amount</Th>
-                <Th>Status</Th>
-                <Th>Email</Th>
-                <Th className="text-right">Actions</Th>
-              </tr>
-            </THead>
-            <tbody>
-              {result.items.map((invoice) => (
-                <ClickableRow key={invoice.id} onClick={() => router.push(`/invoices/${invoice.id}`)}>
-                  <Td>
-                    <span className="font-medium">{invoice.invoiceNumber}</span>
-                  </Td>
-                  <Td muted>{invoice.customer.name}</Td>
-                  <Td muted>{invoice.invoiceDate.slice(0, 10)}</Td>
-                  <Td muted>{invoice.dueDate.slice(0, 10)}</Td>
-                  <Td className="tabular-nums">{formatMoney(invoice.total, invoice.currency)}</Td>
-                  <Td>
-                    <InvoiceStatusWithViewed status={invoice.status} viewedAt={invoice.viewedAt} />
-                  </Td>
-                  <Td>
-                    <StatusBadge
-                      status={sendingId === invoice.id ? "SENDING" : invoice.emailStatus}
-                    />
-                  </Td>
-                  <Td className="text-right">
-                    <div
-                      onClick={(event) => event.stopPropagation()}
-                      onKeyDown={(event) => event.stopPropagation()}
+        <>
+          <div className="hidden lg:block">
+            <DataTable
+              footer={
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-xs text-muted">
+                    Showing {pageFrom}–{pageTo} of {result.total} invoices
+                    {activityFilter ? " (filtered on this page)" : ""}
+                  </p>
+                  <Pagination page={result.page} totalPages={result.totalPages} onPageChange={setPage} />
+                </div>
+              }
+            >
+              <Table>
+                <THead>
+                  <tr>
+                    <Th className="w-[22%]">Invoice</Th>
+                    <Th className="w-[18%]">Customer</Th>
+                    <Th className="w-[14%] text-right">Amount</Th>
+                    <Th className="w-[12%]">Status</Th>
+                    <Th className="w-[24%]">Activity</Th>
+                    <Th className="w-[10%] text-right"> </Th>
+                  </tr>
+                </THead>
+                <tbody>
+                  {visibleItems.map((invoice) => (
+                    <tr
+                      key={invoice.id}
+                      className="group cursor-pointer border-t border-border transition-colors duration-150 hover:bg-muted-soft/60"
+                      onClick={() => setDrawerInvoice(invoice)}
                     >
-                      <ActionGroup>
-                        <EditAction mode="view" onClick={() => router.push(`/invoices/${invoice.id}`)} />
-                        <CopyLinkAction
-                          loading={copyBusyId === invoice.id}
-                          onClick={() => void handleCopyLink(invoice)}
-                        />
-                        {canSend && invoice.status !== "CANCELLED" ? (
-                          <SendEmailAction
-                            label={invoice.emailStatus === "FAILED" ? "Retry" : "Send Email"}
-                            disabled={!invoice.customer.email}
-                            onClick={() => setEmailTarget(invoice)}
+                      <Td className="align-top py-4">
+                        <p className="font-semibold tracking-tight text-foreground">
+                          {invoice.invoiceNumber}
+                        </p>
+                        <p className="mt-1 text-[11px] text-muted">
+                          Issued {formatInvoiceDay(invoice.invoiceDate)}
+                        </p>
+                        <p className="text-[11px] text-muted">Due {formatInvoiceDay(invoice.dueDate)}</p>
+                      </Td>
+                      <Td className="align-top py-4">
+                        <div className="flex items-center gap-2.5">
+                          <span
+                            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted-soft text-[10px] font-semibold tracking-wide text-muted"
+                            aria-hidden
+                          >
+                            {customerInitials(invoice.customer.name)}
+                          </span>
+                          <span className="truncate font-medium text-foreground">
+                            {invoice.customer.name}
+                          </span>
+                        </div>
+                      </Td>
+                      <Td className="align-top py-4 text-right">
+                        <p className="font-semibold tabular-nums text-foreground">
+                          {formatMoney(invoice.total, invoice.currency)}
+                        </p>
+                        <p className="mt-1 text-[11px] text-muted">Invoice total</p>
+                      </Td>
+                      <Td className="align-top py-4">
+                        <InvoiceStatusPill status={invoice.status} />
+                      </Td>
+                      <Td className="align-top py-4">
+                        <div onClick={(event) => event.stopPropagation()}>
+                          <InvoiceActivityCell
+                            invoice={invoice}
+                            sending={sendingId === invoice.id}
+                            canSend={canSend}
+                            onRetry={() => setEmailTarget(invoice)}
                           />
-                        ) : null}
-                        {canUpdate && invoice.status === "DRAFT" ? (
-                          <EditAction onClick={() => router.push(`/invoices/${invoice.id}/edit`)} />
-                        ) : null}
-                      </ActionGroup>
-                    </div>
-                  </Td>
-                </ClickableRow>
-              ))}
-            </tbody>
-          </Table>
-        </DataTable>
+                        </div>
+                      </Td>
+                      <Td className="align-top py-4 text-right">
+                        <div onClick={(event) => event.stopPropagation()}>
+                          <InvoiceRowActions
+                            invoice={invoice}
+                            canSend={canSend}
+                            canUpdate={canUpdate}
+                            canDelete={canDelete}
+                            copyBusy={copyBusyId === invoice.id}
+                            onView={() => setDrawerInvoice(invoice)}
+                            onCopyLink={() => void handleCopyLink(invoice)}
+                            onSendEmail={() => setEmailTarget(invoice)}
+                            onEdit={() => router.push(`/invoices/${invoice.id}/edit`)}
+                            onDelete={() => setDeleteTarget(invoice)}
+                          />
+                        </div>
+                      </Td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
+            </DataTable>
+          </div>
+
+          <div className="space-y-3 lg:hidden">
+            {visibleItems.map((invoice) => (
+              <article
+                key={invoice.id}
+                className="rounded-2xl border border-border bg-surface p-4"
+                onClick={() => setDrawerInvoice(invoice)}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-foreground">{invoice.invoiceNumber}</p>
+                    <p className="mt-1 text-sm font-medium text-foreground">{invoice.customer.name}</p>
+                  </div>
+                  <InvoiceStatusPill status={invoice.status} />
+                </div>
+                <p className="mt-2 text-base font-semibold tabular-nums">
+                  {formatMoney(invoice.total, invoice.currency)}
+                </p>
+                <p className="mt-1 text-xs text-muted">
+                  Issued {formatInvoiceDay(invoice.invoiceDate)} · Due {formatInvoiceDay(invoice.dueDate)}
+                </p>
+                <div className="mt-3 border-t border-border pt-3" onClick={(e) => e.stopPropagation()}>
+                  <InvoiceActivityCell
+                    invoice={invoice}
+                    sending={sendingId === invoice.id}
+                    canSend={canSend}
+                    onRetry={() => setEmailTarget(invoice)}
+                  />
+                </div>
+                <div
+                  className="mt-3 flex justify-end"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <InvoiceRowActions
+                    invoice={invoice}
+                    canSend={canSend}
+                    canUpdate={canUpdate}
+                    canDelete={canDelete}
+                    copyBusy={copyBusyId === invoice.id}
+                    onView={() => setDrawerInvoice(invoice)}
+                    onCopyLink={() => void handleCopyLink(invoice)}
+                    onSendEmail={() => setEmailTarget(invoice)}
+                    onEdit={() => router.push(`/invoices/${invoice.id}/edit`)}
+                    onDelete={() => setDeleteTarget(invoice)}
+                  />
+                </div>
+              </article>
+            ))}
+            <div className="flex flex-col gap-3 rounded-2xl border border-border bg-surface px-4 py-3">
+              <p className="text-xs text-muted">
+                Showing {pageFrom}–{pageTo} of {result.total} invoices
+              </p>
+              <Pagination page={result.page} totalPages={result.totalPages} onPageChange={setPage} />
+            </div>
+          </div>
+        </>
       )}
+
+      {drawerInvoice ? (
+        <InvoiceQuickDrawer
+          invoice={drawerInvoice}
+          sending={sendingId === drawerInvoice.id}
+          copyBusy={copyBusyId === drawerInvoice.id}
+          canSend={canSend}
+          canUpdate={canUpdate}
+          onClose={() => setDrawerInvoice(null)}
+          onCopyLink={() => void handleCopyLink(drawerInvoice)}
+          onSendEmail={() => setEmailTarget(drawerInvoice)}
+          onEdit={() => router.push(`/invoices/${drawerInvoice.id}/edit`)}
+          onOpenFull={() => router.push(`/invoices/${drawerInvoice.id}`)}
+        />
+      ) : null}
 
       {emailTarget ? (
         <Dialog
           title="Send Invoice"
           onClose={() => {
-            if (!emailBusy) {
-              setEmailTarget(null);
-            }
+            if (!emailBusy) setEmailTarget(null);
           }}
           footer={
             <>
@@ -754,22 +877,70 @@ export function InvoicesPage() {
         >
           <div className="space-y-3 text-sm">
             <p className="text-muted">
-              Send {emailTarget.invoiceNumber} to this customer by email. You can resend if it was already sent.
+              Send {emailTarget.invoiceNumber} to this customer by email.
             </p>
             <div className="rounded-xl bg-muted-soft px-3 py-2">
               <p className="text-xs font-medium text-muted">Recipient</p>
-              <p className="mt-1 font-medium text-foreground">{emailTarget.customer.email ?? "No email on file"}</p>
+              <p className="mt-1 font-medium text-foreground">
+                {emailTarget.customer.email ?? "No email on file"}
+              </p>
               <p className="text-muted">{emailTarget.customer.name}</p>
             </div>
             {emailTarget.emailStatus === "FAILED" ? (
-              <p className="text-sm text-primary">Email failed. You can retry sending, or copy the invoice link instead.</p>
-            ) : null}
-            {!emailTarget.customer.email ? (
-              <p className="text-sm text-primary">This customer has no email. Copy the invoice link to share it another way.</p>
+              <p className="text-sm text-primary">Email failed. You can retry sending.</p>
             ) : null}
           </div>
         </Dialog>
       ) : null}
+
+      {deleteTarget ? (
+        <Dialog
+          title="Delete Invoice"
+          onClose={() => {
+            if (!deleteBusy) setDeleteTarget(null);
+          }}
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setDeleteTarget(null)} disabled={deleteBusy}>
+                Cancel
+              </Button>
+              <Button variant="danger" onClick={() => void handleDelete()} disabled={deleteBusy}>
+                {deleteBusy ? "Deleting…" : "Delete"}
+              </Button>
+            </>
+          }
+        >
+          <p className="text-sm text-muted">
+            Delete draft invoice{" "}
+            <span className="font-medium text-foreground">{deleteTarget.invoiceNumber}</span>? This cannot
+            be undone.
+          </p>
+        </Dialog>
+      ) : null}
+    </div>
+  );
+}
+
+function Metric({
+  label,
+  value,
+  tone = "default",
+}: {
+  label: string;
+  value: number;
+  tone?: "default" | "success";
+}) {
+  return (
+    <div className="rounded-xl border border-border bg-surface px-4 py-3">
+      <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted">{label}</p>
+      <p
+        className={cn(
+          "mt-1 text-2xl font-semibold tabular-nums tracking-tight",
+          tone === "success" ? "text-success" : "text-foreground",
+        )}
+      >
+        {value}
+      </p>
     </div>
   );
 }
