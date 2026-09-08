@@ -77,32 +77,32 @@ const CONFIG: Record<
 > = {
   DRAFT: {
     label: "Draft",
-    className: "bg-muted-soft/80 text-muted ring-border",
+    className: "bg-slate-100 text-slate-600 ring-slate-200/80",
     Icon: DraftIcon,
   },
   SENT: {
     label: "Sent",
-    className: "bg-[color-mix(in_srgb,var(--foreground)_4%,transparent)] text-foreground ring-border",
+    className: "bg-sky-50 text-sky-700 ring-sky-200/70",
     Icon: SentIcon,
   },
   VIEWED: {
     label: "Viewed",
-    className: "bg-[color-mix(in_srgb,var(--foreground)_4%,transparent)] text-foreground ring-border",
+    className: "bg-sky-50/80 text-sky-800 ring-sky-200/60",
     Icon: EyeIcon,
   },
   PARTIALLY_PAID: {
     label: "Partial",
-    className: "bg-warning-soft/70 text-warning ring-warning/15",
+    className: "bg-warning-soft/80 text-warning ring-warning/20",
     Icon: PaidIcon,
   },
   PAID: {
     label: "Paid",
-    className: "bg-success-soft/80 text-success ring-success/15",
+    className: "bg-success-soft/90 text-success ring-success/20",
     Icon: PaidIcon,
   },
   OVERDUE: {
     label: "Overdue",
-    className: "bg-primary-soft/70 text-primary ring-primary/15",
+    className: "bg-danger-soft/80 text-danger ring-danger/20",
     Icon: WarnIcon,
   },
   CANCELLED: {
@@ -124,11 +124,11 @@ export function InvoiceStatusPill({ status }: { status: string }) {
   return (
     <span
       className={cn(
-        "inline-flex h-7 items-center gap-1.5 rounded-lg px-2 text-xs font-medium ring-1 ring-inset",
+        "inline-flex h-6 items-center gap-1 rounded-md px-1.5 text-[11px] font-medium ring-1 ring-inset",
         config.className,
       )}
     >
-      <Icon className="h-3.5 w-3.5 shrink-0 opacity-80" />
+      <Icon className="h-3 w-3 shrink-0 opacity-80" />
       {config.label}
     </span>
   );

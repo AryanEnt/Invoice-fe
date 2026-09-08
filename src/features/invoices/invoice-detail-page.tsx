@@ -17,6 +17,7 @@ import { hasPermission } from "@/lib/permissions";
 import { useAuth } from "@/providers/auth-provider";
 import { useToast } from "@/providers/toast-provider";
 import { RecordPaymentDialog } from "@/features/payments/record-payment-dialog";
+import { SendingEmailOverlay } from "@/features/invoices/sending-email-overlay";
 import {
   cancelInvoice,
   deleteInvoice,
@@ -45,6 +46,7 @@ export function InvoiceDetailPage({ invoiceId }: InvoiceDetailPageProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [sendingEmail, setSendingEmail] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [payOpen, setPayOpen] = useState(false);
@@ -133,10 +135,34 @@ export function InvoiceDetailPage({ invoiceId }: InvoiceDetailPageProps) {
             />
             {canSend && invoice.status !== "CANCELLED" ? (
               <Button
-                onClick={() => void run(() => sendInvoice(invoice.id), "Invoice sent successfully")}
+                loading={sendingEmail}
+                onClick={() =>
+                  void (async () => {
+                    setSendingEmail(true);
+                    setBusy(true);
+                    try {
+                      await sendInvoice(invoice.id);
+                      notify("Invoice sent successfully");
+                      router.replace("/invoices");
+                    } catch (err) {
+                      notify(
+                        err instanceof ApiError ? err.message : "Unable to update invoice.",
+                        "error",
+                      );
+                      setSendingEmail(false);
+                      setBusy(false);
+                    }
+                  })()
+                }
                 disabled={busy}
               >
-                {busy ? "Sending…" : invoice.emailStatus === "FAILED" ? "Retry email" : invoice.emailStatus === "SENT" ? "Resend email" : "Send invoice"}
+                {sendingEmail
+                  ? "Sending…"
+                  : invoice.emailStatus === "FAILED"
+                    ? "Retry email"
+                    : invoice.emailStatus === "SENT"
+                      ? "Resend email"
+                      : "Send invoice"}
               </Button>
             ) : null}
             {canPay && ["SENT", "VIEWED", "OVERDUE", "PARTIALLY_PAID"].includes(invoice.status) ? (
@@ -367,6 +393,12 @@ export function InvoiceDetailPage({ invoiceId }: InvoiceDetailPageProps) {
           }}
         />
       ) : null}
+
+      <SendingEmailOverlay
+        open={sendingEmail}
+        invoiceNumber={invoice.invoiceNumber}
+        recipient={invoice.customer.email}
+      />
     </div>
   );
 }

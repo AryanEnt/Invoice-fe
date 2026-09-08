@@ -2,20 +2,17 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { DataTable, Table, Td, Th, THead } from "@/components/ui/data-table";
 import { Dialog } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { Field, SelectInput, TextInput } from "@/components/ui/field";
-import { PageHeader } from "@/components/ui/page-header";
 import { Pagination } from "@/components/ui/pagination";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { statusLabel } from "@/components/ui/status-badge";
-import { InvoiceActivityCell } from "@/features/invoices/invoice-activity-cell";
 import {
-  customerInitials,
   formatInvoiceDay,
   invoiceEmailAt,
 } from "@/features/invoices/invoice-activity";
@@ -23,6 +20,7 @@ import { InvoiceBoard, type InvoiceBoardColumnId } from "@/features/invoices/inv
 import { InvoiceQuickDrawer } from "@/features/invoices/invoice-quick-drawer";
 import { InvoiceRowActions } from "@/features/invoices/invoice-row-actions";
 import { InvoiceStatusPill } from "@/features/invoices/invoice-status-pill";
+import { SendingEmailOverlay } from "@/features/invoices/sending-email-overlay";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { cn } from "@/lib/cn";
 import { copyText } from "@/lib/copy-text";
@@ -82,7 +80,7 @@ function readStoredView(): InvoiceViewMode {
 
 export function InvoicesPage() {
   const { user } = useAuth();
-  const { organizationId, tenantListsReady, scopeLabel } = useWorkspace();
+  const { organizationId, tenantListsReady } = useWorkspace();
   const searchParams = useSearchParams();
   const canCreate = hasPermission(user, "INVOICES_CREATE");
   const canUpdate = hasPermission(user, "INVOICES_UPDATE");
@@ -413,239 +411,431 @@ export function InvoicesPage() {
   const pageFrom = result ? (result.page - 1) * result.pageSize + (visibleItems.length ? 1 : 0) : 0;
   const pageTo = result ? (result.page - 1) * result.pageSize + visibleItems.length : 0;
 
+  const filterControlClass = "h-9 w-full min-w-[7.5rem] border-border bg-surface py-0 shadow-none sm:w-auto";
+
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Invoices"
-        description="Manage invoices, track customer activity, and monitor payments."
-        actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="inline-flex rounded-lg border border-border bg-surface p-0.5">
-              <button
-                type="button"
-                className={cn(
-                  "rounded-md px-3 py-1.5 text-sm font-medium transition",
-                  view === "list" ? "bg-muted-soft text-foreground" : "text-muted hover:text-foreground",
-                )}
-                onClick={() => changeView("list")}
-              >
-                List
-              </button>
-              <button
-                type="button"
-                className={cn(
-                  "rounded-md px-3 py-1.5 text-sm font-medium transition",
-                  view === "board" ? "bg-muted-soft text-foreground" : "text-muted hover:text-foreground",
-                )}
-                onClick={() => changeView("board")}
-              >
-                Board
-              </button>
-            </div>
-            {canCreate ? (
-              <Link href="/invoices/new">
-                <Button>+ Create Invoice</Button>
-              </Link>
-            ) : null}
+    <div className="space-y-4">
+      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
+        <div className="min-w-0">
+          <h1 className="text-[26px] font-semibold leading-tight tracking-tight text-foreground">
+            Invoices
+          </h1>
+          <p className="mt-1 max-w-2xl text-sm text-muted">
+            Manage invoices, track customer activity, and monitor payments.
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <div className="inline-flex rounded-[8px] border border-border bg-surface p-0.5">
+            <button
+              type="button"
+              className={cn(
+                "rounded-md px-2.5 py-1 text-xs font-medium transition",
+                view === "list" ? "bg-muted-soft text-foreground" : "text-muted hover:text-foreground",
+              )}
+              onClick={() => changeView("list")}
+            >
+              List
+            </button>
+            <button
+              type="button"
+              className={cn(
+                "rounded-md px-2.5 py-1 text-xs font-medium transition",
+                view === "board" ? "bg-muted-soft text-foreground" : "text-muted hover:text-foreground",
+              )}
+              onClick={() => changeView("board")}
+            >
+              Board
+            </button>
           </div>
-        }
-      />
+          {canCreate ? (
+            <Link href="/invoices/new">
+              <Button size="sm" className="h-8 px-3 text-xs">
+                + Create Invoice
+              </Button>
+            </Link>
+          ) : null}
+        </div>
+      </div>
 
       {summary ? (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Metric label="Total" value={summary.all} />
-          <Metric label="Draft" value={summary.notSent.count} />
-          <Metric label="Outstanding" value={summary.outstanding} />
-          <Metric label="Paid" value={summary.paidInvoices.count} tone="success" />
+        <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+          <Metric
+            label="Total"
+            value={summary.all}
+            tone="neutral"
+            icon={
+              <svg viewBox="0 0 16 16" fill="none" className="h-3.5 w-3.5" aria-hidden>
+                <rect x="2.5" y="3" width="11" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.3" />
+                <path d="M5 6.5h6M5 9h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+              </svg>
+            }
+          />
+          <Metric
+            label="Draft"
+            value={summary.notSent.count}
+            tone="draft"
+            icon={
+              <svg viewBox="0 0 16 16" fill="none" className="h-3.5 w-3.5" aria-hidden>
+                <path
+                  d="M4.5 2.5h5.2L12 4.8v8.7H4.5V2.5Z"
+                  stroke="currentColor"
+                  strokeWidth="1.2"
+                  strokeLinejoin="round"
+                />
+                <path d="M9.5 2.5v2.6H12" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+              </svg>
+            }
+          />
+          <Metric
+            label="Outstanding"
+            value={summary.outstanding}
+            tone="outstanding"
+            icon={
+              <svg viewBox="0 0 16 16" fill="none" className="h-3.5 w-3.5" aria-hidden>
+                <circle cx="8" cy="8" r="5.2" stroke="currentColor" strokeWidth="1.2" />
+                <path d="M8 5.2v3.2L10 10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+              </svg>
+            }
+          />
+          <Metric
+            label="Paid"
+            value={summary.paidInvoices.count}
+            tone="paid"
+            icon={
+              <svg viewBox="0 0 16 16" fill="none" className="h-3.5 w-3.5" aria-hidden>
+                <circle cx="8" cy="8" r="5.2" stroke="currentColor" strokeWidth="1.2" />
+                <path
+                  d="M5.2 8.1 7.1 10l3.7-4"
+                  stroke="currentColor"
+                  strokeWidth="1.3"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            }
+          />
         </div>
       ) : null}
 
-      <div className="rounded-2xl border border-border bg-surface px-4 py-3.5">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-          <div className="min-w-0 flex-1">
-            <TextInput
-              id="invoice-search"
-              value={search}
-              onChange={(event) => {
-                setSearch(event.target.value);
-                setPage(1);
-              }}
-              placeholder="Search invoices or customers..."
-              aria-label="Search invoices or customers"
-            />
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <SelectInput
-              id="invoice-status"
-              className="w-[8.5rem]"
-              value={status}
-              aria-label="Status filter"
-              onChange={(event) => {
-                setStatus(event.target.value as InvoiceStatus | "");
-                setPage(1);
-              }}
-            >
-              <option value="">Status</option>
-              {statuses.map((value) => (
-                <option key={value} value={value}>
-                  {statusLabel(value)}
-                </option>
-              ))}
-            </SelectInput>
-            <SelectInput
-              id="invoice-activity-filter"
-              className="w-[8.5rem]"
-              value={activityFilter}
-              aria-label="Email activity filter"
-              onChange={(event) => {
-                setActivityFilter(event.target.value as ActivityFilter);
-                setPage(1);
-              }}
-            >
-              <option value="">Email</option>
-              <option value="NOT_SENT">Not Sent</option>
-              <option value="SENT">Sent</option>
-              <option value="VIEWED">Viewed</option>
-              <option value="FAILED">Failed</option>
-            </SelectInput>
-            <SelectInput
-              id="invoice-date-preset"
-              className="w-[9.5rem]"
-              value={datePreset}
-              aria-label="Date filter"
-              onChange={(event) => {
-                setDatePreset(event.target.value as InvoiceDatePreset);
-                setPage(1);
-              }}
-            >
-              {INVOICE_DATE_PRESETS.map((preset) => (
-                <option key={preset} value={preset}>
-                  {INVOICE_DATE_PRESET_LABELS[preset]}
-                </option>
-              ))}
-            </SelectInput>
-            <Button variant="secondary" size="sm" onClick={() => setFiltersOpen((open) => !open)}>
-              Filters{activeFilterCount ? ` (${activeFilterCount})` : ""}
-            </Button>
-            {hasFilters ? (
-              <Button variant="ghost" size="sm" onClick={clearFilters}>
-                Clear
+      <div className="space-y-2">
+        <div className="rounded-[10px] border border-border bg-surface px-2.5 py-2 sm:px-3">
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+            <div className="relative min-w-0 w-full lg:w-[42%] lg:shrink-0">
+              <span
+                className="pointer-events-none absolute inset-y-0 left-2.5 flex items-center text-muted"
+                aria-hidden
+              >
+                <svg viewBox="0 0 16 16" fill="none" className="h-3.5 w-3.5">
+                  <circle cx="7" cy="7" r="4.5" stroke="currentColor" strokeWidth="1.4" />
+                  <path
+                    d="M10.5 10.5L14 14"
+                    stroke="currentColor"
+                    strokeWidth="1.4"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </span>
+              <TextInput
+                id="invoice-search"
+                value={search}
+                onChange={(event) => {
+                  setSearch(event.target.value);
+                  setPage(1);
+                }}
+                placeholder="Search invoices or customers"
+                aria-label="Search invoices or customers"
+                className="h-9 border-border bg-surface py-0 pl-8 shadow-none"
+              />
+            </div>
+
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+              <label className="sr-only" htmlFor="invoice-status">
+                Status
+              </label>
+              <SelectInput
+                id="invoice-status"
+                className={cn(filterControlClass, status && "border-border bg-muted-soft/60")}
+                value={status}
+                aria-label="Status filter"
+                onChange={(event) => {
+                  setStatus(event.target.value as InvoiceStatus | "");
+                  setPage(1);
+                }}
+              >
+                <option value="">Status</option>
+                {statuses.map((value) => (
+                  <option key={value} value={value}>
+                    {statusLabel(value)}
+                  </option>
+                ))}
+              </SelectInput>
+
+              <label className="sr-only" htmlFor="invoice-activity-filter">
+                Email
+              </label>
+              <SelectInput
+                id="invoice-activity-filter"
+                className={cn(filterControlClass, activityFilter && "border-border bg-muted-soft/60")}
+                value={activityFilter}
+                aria-label="Email activity filter"
+                onChange={(event) => {
+                  setActivityFilter(event.target.value as ActivityFilter);
+                  setPage(1);
+                }}
+              >
+                <option value="">Email</option>
+                <option value="NOT_SENT">Not sent</option>
+                <option value="SENT">Sent</option>
+                <option value="VIEWED">Viewed</option>
+                <option value="FAILED">Failed</option>
+              </SelectInput>
+
+              <label className="sr-only" htmlFor="invoice-date-preset">
+                Date
+              </label>
+              <SelectInput
+                id="invoice-date-preset"
+                className={cn(filterControlClass, "min-w-[8.5rem]")}
+                value={datePreset}
+                aria-label="Date filter"
+                onChange={(event) => {
+                  setDatePreset(event.target.value as InvoiceDatePreset);
+                  setPage(1);
+                }}
+              >
+                {INVOICE_DATE_PRESETS.map((preset) => (
+                  <option key={preset} value={preset}>
+                    {INVOICE_DATE_PRESET_LABELS[preset]}
+                  </option>
+                ))}
+              </SelectInput>
+
+              <Button
+                variant={filtersOpen || activeFilterCount ? "secondary" : "outline"}
+                size="sm"
+                className="h-9 gap-1.5 px-2.5 text-xs"
+                aria-expanded={filtersOpen}
+                onClick={() => setFiltersOpen((open) => !open)}
+              >
+                <svg viewBox="0 0 16 16" fill="none" className="h-3.5 w-3.5" aria-hidden>
+                  <path
+                    d="M2.5 3.5h11M4.5 8h7M6.5 12.5h3"
+                    stroke="currentColor"
+                    strokeWidth="1.4"
+                    strokeLinecap="round"
+                  />
+                </svg>
+                More filters
+                {activeFilterCount ? (
+                  <span className="ml-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-foreground/90 px-1 text-[10px] font-semibold text-background">
+                    {activeFilterCount}
+                  </span>
+                ) : null}
               </Button>
-            ) : null}
-          </div>
-        </div>
 
-        {datePreset === "custom" ? (
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <Field label="From" htmlFor="invoice-custom-from" required>
-              <TextInput
-                id="invoice-custom-from"
-                type="date"
-                value={customFrom}
-                onChange={(event) => {
-                  setCustomFrom(event.target.value);
-                  setPage(1);
-                }}
-                required
-              />
-            </Field>
-            <Field label="To" htmlFor="invoice-custom-to" required>
-              <TextInput
-                id="invoice-custom-to"
-                type="date"
-                value={customTo}
-                onChange={(event) => {
-                  setCustomTo(event.target.value);
-                  setPage(1);
-                }}
-                required
-              />
-            </Field>
+              {hasFilters ? (
+                <Button variant="ghost" size="sm" className="h-9 px-2 text-xs text-muted" onClick={clearFilters}>
+                  Reset
+                </Button>
+              ) : null}
+            </div>
           </div>
-        ) : null}
 
-        {filtersOpen ? (
-          <div className="mt-3 grid gap-3 border-t border-border pt-3 md:grid-cols-3 xl:grid-cols-4">
-            {canFilterByMember ? (
-              <>
-                {isSuperAdmin ? (
-                  <Field label="Team" htmlFor="invoice-admin-filter">
+          {datePreset === "custom" ? (
+            <div className="mt-2 grid gap-2 border-t border-border pt-2 sm:grid-cols-2">
+              <Field label="From" htmlFor="invoice-custom-from" required>
+                <TextInput
+                  id="invoice-custom-from"
+                  type="date"
+                  className="h-9 py-0"
+                  value={customFrom}
+                  onChange={(event) => {
+                    setCustomFrom(event.target.value);
+                    setPage(1);
+                  }}
+                  required
+                />
+              </Field>
+              <Field label="To" htmlFor="invoice-custom-to" required>
+                <TextInput
+                  id="invoice-custom-to"
+                  type="date"
+                  className="h-9 py-0"
+                  value={customTo}
+                  onChange={(event) => {
+                    setCustomTo(event.target.value);
+                    setPage(1);
+                  }}
+                  required
+                />
+              </Field>
+            </div>
+          ) : null}
+
+          {filtersOpen ? (
+            <div className="mt-2 grid gap-2 border-t border-border pt-2 md:grid-cols-2 xl:grid-cols-4">
+              {canFilterByMember ? (
+                <>
+                  {isSuperAdmin ? (
+                    <Field label="Team" htmlFor="invoice-admin-filter">
+                      <SelectInput
+                        id="invoice-admin-filter"
+                        className="h-9 py-0"
+                        value={administratorId}
+                        onChange={(event) => {
+                          setAdministratorId(event.target.value);
+                          setAssignedMemberId("");
+                          setPage(1);
+                        }}
+                      >
+                        <option value="">All teams</option>
+                        {administrators.map((admin) => (
+                          <option key={admin.id} value={admin.id}>
+                            {admin.firstName} {admin.lastName}
+                          </option>
+                        ))}
+                      </SelectInput>
+                    </Field>
+                  ) : null}
+                  <Field label="Member" htmlFor="invoice-member-filter">
                     <SelectInput
-                      id="invoice-admin-filter"
-                      value={administratorId}
+                      id="invoice-member-filter"
+                      className="h-9 py-0"
+                      value={assignedMemberId}
                       onChange={(event) => {
-                        setAdministratorId(event.target.value);
-                        setAssignedMemberId("");
+                        setAssignedMemberId(event.target.value);
                         setPage(1);
                       }}
                     >
-                      <option value="">All teams</option>
-                      {administrators.map((admin) => (
-                        <option key={admin.id} value={admin.id}>
-                          {admin.firstName} {admin.lastName}
+                      <option value="">All members</option>
+                      {members.map((member) => (
+                        <option key={member.id} value={member.id}>
+                          {member.firstName} {member.lastName}
                         </option>
                       ))}
                     </SelectInput>
                   </Field>
-                ) : null}
-                <Field label="Member" htmlFor="invoice-member-filter">
+                </>
+              ) : null}
+              {canViewCustomers ? (
+                <Field label="Customer" htmlFor="invoice-customer-filter">
                   <SelectInput
-                    id="invoice-member-filter"
-                    value={assignedMemberId}
+                    id="invoice-customer-filter"
+                    className="h-9 py-0"
+                    value={customerId}
                     onChange={(event) => {
-                      setAssignedMemberId(event.target.value);
+                      setCustomerId(event.target.value);
                       setPage(1);
                     }}
                   >
-                    <option value="">All members</option>
-                    {members.map((member) => (
-                      <option key={member.id} value={member.id}>
-                        {member.firstName} {member.lastName}
+                    <option value="">All customers</option>
+                    {customers.map((customer) => (
+                      <option key={customer.id} value={customer.id}>
+                        {customer.name}
                       </option>
                     ))}
                   </SelectInput>
                 </Field>
-              </>
-            ) : null}
-            {canViewCustomers ? (
-              <Field label="Customer" htmlFor="invoice-customer-filter">
+              ) : null}
+              <Field label="Sort" htmlFor="invoice-sort">
                 <SelectInput
-                  id="invoice-customer-filter"
-                  value={customerId}
+                  id="invoice-sort"
+                  className="h-9 py-0"
+                  value={`${sort}:${sortDir}`}
                   onChange={(event) => {
-                    setCustomerId(event.target.value);
-                    setPage(1);
+                    const [nextSort, nextDir] = event.target.value.split(":");
+                    setSort(nextSort);
+                    setSortDir(nextDir as "asc" | "desc");
                   }}
                 >
-                  <option value="">All customers</option>
-                  {customers.map((customer) => (
-                    <option key={customer.id} value={customer.id}>
-                      {customer.name}
-                    </option>
-                  ))}
+                  <option value="createdAt:desc">Newest first</option>
+                  <option value="createdAt:asc">Oldest first</option>
+                  <option value="dueDate:asc">Due date</option>
+                  <option value="total:desc">Highest total</option>
+                  <option value="invoiceNumber:asc">Invoice number</option>
                 </SelectInput>
               </Field>
-            ) : null}
-            <Field label="Sort" htmlFor="invoice-sort">
-              <SelectInput
-                id="invoice-sort"
-                value={`${sort}:${sortDir}`}
-                onChange={(event) => {
-                  const [nextSort, nextDir] = event.target.value.split(":");
-                  setSort(nextSort);
-                  setSortDir(nextDir as "asc" | "desc");
+            </div>
+          ) : null}
+        </div>
+
+        {hasFilters ? (
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+            {status ? (
+              <FilterChip
+                label={`Status: ${statusLabel(status)}`}
+                onRemove={() => {
+                  setStatus("");
+                  setPage(1);
                 }}
-              >
-                <option value="createdAt:desc">Newest first</option>
-                <option value="createdAt:asc">Oldest first</option>
-                <option value="dueDate:asc">Due date</option>
-                <option value="total:desc">Highest total</option>
-                <option value="invoiceNumber:asc">Invoice number</option>
-              </SelectInput>
-            </Field>
+              />
+            ) : null}
+            {activityFilter ? (
+              <FilterChip
+                label={`Email: ${
+                  activityFilter === "NOT_SENT"
+                    ? "Not sent"
+                    : activityFilter === "SENT"
+                      ? "Sent"
+                      : activityFilter === "VIEWED"
+                        ? "Viewed"
+                        : "Failed"
+                }`}
+                onRemove={() => {
+                  setActivityFilter("");
+                  setPage(1);
+                }}
+              />
+            ) : null}
+            {customerId ? (
+              <FilterChip
+                label={`Customer: ${customers.find((c) => c.id === customerId)?.name ?? "Selected"}`}
+                onRemove={() => {
+                  setCustomerId("");
+                  setPage(1);
+                }}
+              />
+            ) : null}
+            {assignedMemberId ? (
+              <FilterChip
+                label={`Member: ${
+                  (() => {
+                    const member = members.find((m) => m.id === assignedMemberId);
+                    return member ? `${member.firstName} ${member.lastName}` : "Selected";
+                  })()
+                }`}
+                onRemove={() => {
+                  setAssignedMemberId("");
+                  setPage(1);
+                }}
+              />
+            ) : null}
+            {administratorId ? (
+              <FilterChip
+                label={`Team: ${
+                  (() => {
+                    const admin = administrators.find((a) => a.id === administratorId);
+                    return admin ? `${admin.firstName} ${admin.lastName}` : "Selected";
+                  })()
+                }`}
+                onRemove={() => {
+                  setAdministratorId("");
+                  setAssignedMemberId("");
+                  setPage(1);
+                }}
+              />
+            ) : null}
+            {debouncedSearch ? (
+              <FilterChip
+                label={`Search: ${debouncedSearch}`}
+                onRemove={() => {
+                  setSearch("");
+                  setPage(1);
+                }}
+              />
+            ) : null}
           </div>
         ) : null}
-        {scopeLabel ? <p className="mt-2 text-xs text-muted">{scopeLabel}</p> : null}
       </div>
 
       {view === "board" ? (
@@ -667,7 +857,7 @@ export function InvoicesPage() {
           />
         )
       ) : loading && !result ? (
-        <TableSkeleton cols={6} />
+        <TableSkeleton cols={8} />
       ) : error && !result ? (
         <ErrorState title="We couldn't load your invoices." message={error} onRetry={() => void loadList()} />
       ) : !result || visibleItems.length === 0 ? (
@@ -685,7 +875,7 @@ export function InvoicesPage() {
               </Button>
             ) : canCreate ? (
               <Link href="/invoices/new">
-                <Button>+ Create Invoice</Button>
+                <Button size="sm">+ Create Invoice</Button>
               </Link>
             ) : null
           }
@@ -695,7 +885,7 @@ export function InvoicesPage() {
           <div className="hidden lg:block">
             <DataTable
               footer={
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <p className="text-xs text-muted">
                     Showing {pageFrom}–{pageTo} of {result.total} invoices
                     {activityFilter ? " (filtered on this page)" : ""}
@@ -707,55 +897,46 @@ export function InvoicesPage() {
               <Table>
                 <THead>
                   <tr>
-                    <Th className="w-[22%]">Invoice</Th>
-                    <Th className="w-[18%]">Customer</Th>
-                    <Th className="w-[14%] text-right">Amount</Th>
-                    <Th className="w-[12%]">Status</Th>
-                    <Th className="w-[24%]">Activity</Th>
-                    <Th className="w-[10%] text-right"> </Th>
+                    <Th className="px-3 py-2.5">Invoice</Th>
+                    <Th className="px-3 py-2.5">Customer</Th>
+                    <Th className="px-3 py-2.5">Issue date</Th>
+                    <Th className="px-3 py-2.5">Due date</Th>
+                    <Th className="px-3 py-2.5 text-right">Amount</Th>
+                    <Th className="px-3 py-2.5">Status</Th>
+                    <Th className="px-3 py-2.5">Email status</Th>
+                    <Th className="w-12 px-2 py-2.5 text-right"> </Th>
                   </tr>
                 </THead>
                 <tbody>
                   {visibleItems.map((invoice) => (
                     <tr
                       key={invoice.id}
-                      className="group cursor-pointer border-t border-border transition-colors duration-150 hover:bg-muted-soft/60"
+                      className="group cursor-pointer border-t border-border/80 transition-colors duration-100 hover:bg-muted-soft/50"
                       onClick={() => setDrawerInvoice(invoice)}
                     >
-                      <Td className="align-top py-4">
-                        <p className="font-semibold tracking-tight text-foreground">
+                      <Td className="px-3 py-2.5">
+                        <span className="text-sm font-medium tracking-tight text-foreground">
                           {invoice.invoiceNumber}
-                        </p>
-                        <p className="mt-1 text-[11px] text-muted">
-                          Issued {formatInvoiceDay(invoice.invoiceDate)}
-                        </p>
-                        <p className="text-[11px] text-muted">Due {formatInvoiceDay(invoice.dueDate)}</p>
+                        </span>
                       </Td>
-                      <Td className="align-top py-4">
-                        <div className="flex items-center gap-2.5">
-                          <span
-                            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted-soft text-[10px] font-semibold tracking-wide text-muted"
-                            aria-hidden
-                          >
-                            {customerInitials(invoice.customer.name)}
-                          </span>
-                          <span className="truncate font-medium text-foreground">
-                            {invoice.customer.name}
-                          </span>
-                        </div>
+                      <Td className="max-w-[12rem] truncate px-3 py-2.5 text-sm font-medium">
+                        {invoice.customer.name}
                       </Td>
-                      <Td className="align-top py-4 text-right">
-                        <p className="font-semibold tabular-nums text-foreground">
-                          {formatMoney(invoice.total, invoice.currency)}
-                        </p>
-                        <p className="mt-1 text-[11px] text-muted">Invoice total</p>
+                      <Td className="px-3 py-2.5 text-sm text-muted" muted>
+                        {formatInvoiceDay(invoice.invoiceDate)}
                       </Td>
-                      <Td className="align-top py-4">
+                      <Td className="px-3 py-2.5 text-sm text-muted" muted>
+                        {formatInvoiceDay(invoice.dueDate)}
+                      </Td>
+                      <Td className="px-3 py-2.5 text-right text-sm font-semibold tabular-nums text-foreground">
+                        {formatMoney(invoice.total, invoice.currency)}
+                      </Td>
+                      <Td className="px-3 py-2.5">
                         <InvoiceStatusPill status={invoice.status} />
                       </Td>
-                      <Td className="align-top py-4">
+                      <Td className="px-3 py-2.5">
                         <div onClick={(event) => event.stopPropagation()}>
-                          <InvoiceActivityCell
+                          <CompactEmailStatus
                             invoice={invoice}
                             sending={sendingId === invoice.id}
                             canSend={canSend}
@@ -763,7 +944,7 @@ export function InvoicesPage() {
                           />
                         </div>
                       </Td>
-                      <Td className="align-top py-4 text-right">
+                      <Td className="px-2 py-2.5 text-right">
                         <div onClick={(event) => event.stopPropagation()}>
                           <InvoiceRowActions
                             invoice={invoice}
@@ -786,54 +967,56 @@ export function InvoicesPage() {
             </DataTable>
           </div>
 
-          <div className="space-y-3 lg:hidden">
+          <div className="space-y-2 lg:hidden">
             {visibleItems.map((invoice) => (
               <article
                 key={invoice.id}
-                className="rounded-2xl border border-border bg-surface p-4"
+                className="rounded-[10px] border border-border bg-surface p-3"
                 onClick={() => setDrawerInvoice(invoice)}
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-semibold text-foreground">{invoice.invoiceNumber}</p>
-                    <p className="mt-1 text-sm font-medium text-foreground">{invoice.customer.name}</p>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-foreground">{invoice.invoiceNumber}</p>
+                    <p className="mt-0.5 truncate text-sm text-foreground">{invoice.customer.name}</p>
                   </div>
-                  <InvoiceStatusPill status={invoice.status} />
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <InvoiceStatusPill status={invoice.status} />
+                    <div onClick={(event) => event.stopPropagation()}>
+                      <InvoiceRowActions
+                        invoice={invoice}
+                        canSend={canSend}
+                        canUpdate={canUpdate}
+                        canDelete={canDelete}
+                        copyBusy={copyBusyId === invoice.id}
+                        onView={() => setDrawerInvoice(invoice)}
+                        onCopyLink={() => void handleCopyLink(invoice)}
+                        onSendEmail={() => setEmailTarget(invoice)}
+                        onEdit={() => router.push(`/invoices/${invoice.id}/edit`)}
+                        onDelete={() => setDeleteTarget(invoice)}
+                      />
+                    </div>
+                  </div>
                 </div>
-                <p className="mt-2 text-base font-semibold tabular-nums">
-                  {formatMoney(invoice.total, invoice.currency)}
-                </p>
-                <p className="mt-1 text-xs text-muted">
-                  Issued {formatInvoiceDay(invoice.invoiceDate)} · Due {formatInvoiceDay(invoice.dueDate)}
-                </p>
-                <div className="mt-3 border-t border-border pt-3" onClick={(e) => e.stopPropagation()}>
-                  <InvoiceActivityCell
+                <div className="mt-2 flex items-end justify-between gap-3">
+                  <div className="text-xs text-muted">
+                    <p>Issued {formatInvoiceDay(invoice.invoiceDate)}</p>
+                    <p>Due {formatInvoiceDay(invoice.dueDate)}</p>
+                  </div>
+                  <p className="text-sm font-semibold tabular-nums text-foreground">
+                    {formatMoney(invoice.total, invoice.currency)}
+                  </p>
+                </div>
+                <div className="mt-2 border-t border-border/80 pt-2" onClick={(e) => e.stopPropagation()}>
+                  <CompactEmailStatus
                     invoice={invoice}
                     sending={sendingId === invoice.id}
                     canSend={canSend}
                     onRetry={() => setEmailTarget(invoice)}
                   />
                 </div>
-                <div
-                  className="mt-3 flex justify-end"
-                  onClick={(event) => event.stopPropagation()}
-                >
-                  <InvoiceRowActions
-                    invoice={invoice}
-                    canSend={canSend}
-                    canUpdate={canUpdate}
-                    canDelete={canDelete}
-                    copyBusy={copyBusyId === invoice.id}
-                    onView={() => setDrawerInvoice(invoice)}
-                    onCopyLink={() => void handleCopyLink(invoice)}
-                    onSendEmail={() => setEmailTarget(invoice)}
-                    onEdit={() => router.push(`/invoices/${invoice.id}/edit`)}
-                    onDelete={() => setDeleteTarget(invoice)}
-                  />
-                </div>
               </article>
             ))}
-            <div className="flex flex-col gap-3 rounded-2xl border border-border bg-surface px-4 py-3">
+            <div className="flex flex-col gap-2 rounded-[10px] border border-border bg-surface px-3 py-2.5">
               <p className="text-xs text-muted">
                 Showing {pageFrom}–{pageTo} of {result.total} invoices
               </p>
@@ -869,7 +1052,11 @@ export function InvoicesPage() {
               <Button variant="secondary" onClick={() => setEmailTarget(null)} disabled={emailBusy}>
                 Cancel
               </Button>
-              <Button onClick={() => void handleSendEmail()} disabled={emailBusy || !emailTarget.customer.email}>
+              <Button
+                loading={emailBusy}
+                onClick={() => void handleSendEmail()}
+                disabled={emailBusy || !emailTarget.customer.email}
+              >
                 {emailBusy ? "Sending…" : "Send Invoice"}
               </Button>
             </>
@@ -892,6 +1079,12 @@ export function InvoicesPage() {
           </div>
         </Dialog>
       ) : null}
+
+      <SendingEmailOverlay
+        open={emailBusy}
+        invoiceNumber={emailTarget?.invoiceNumber}
+        recipient={emailTarget?.customer.email}
+      />
 
       {deleteTarget ? (
         <Dialog
@@ -924,23 +1117,135 @@ export function InvoicesPage() {
 function Metric({
   label,
   value,
-  tone = "default",
+  tone,
+  icon,
 }: {
   label: string;
   value: number;
-  tone?: "default" | "success";
+  tone: "neutral" | "draft" | "outstanding" | "paid";
+  icon: ReactNode;
 }) {
+  const toneStyles = {
+    neutral: {
+      card: "border-border bg-surface",
+      icon: "bg-muted-soft text-muted",
+      value: "text-foreground",
+    },
+    draft: {
+      card: "border-sky-100 bg-sky-50/40",
+      icon: "bg-sky-100/80 text-sky-700",
+      value: "text-sky-900",
+    },
+    outstanding: {
+      card: "border-warning/15 bg-warning-soft/40",
+      icon: "bg-warning-soft text-warning",
+      value: "text-warning",
+    },
+    paid: {
+      card: "border-success/15 bg-success-soft/50",
+      icon: "bg-success-soft text-success",
+      value: "text-success",
+    },
+  }[tone];
+
   return (
-    <div className="rounded-xl border border-border bg-surface px-4 py-3">
-      <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted">{label}</p>
-      <p
-        className={cn(
-          "mt-1 text-2xl font-semibold tabular-nums tracking-tight",
-          tone === "success" ? "text-success" : "text-foreground",
-        )}
-      >
+    <div className={cn("rounded-[10px] border px-3 py-2.5", toneStyles.card)}>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted">{label}</p>
+        <span
+          className={cn(
+            "inline-flex h-6 w-6 items-center justify-center rounded-md",
+            toneStyles.icon,
+          )}
+        >
+          {icon}
+        </span>
+      </div>
+      <p className={cn("mt-1 text-2xl font-semibold tabular-nums tracking-tight", toneStyles.value)}>
         {value}
       </p>
     </div>
+  );
+}
+
+function CompactEmailStatus({
+  invoice,
+  sending,
+  canSend,
+  onRetry,
+}: {
+  invoice: Invoice;
+  sending?: boolean;
+  canSend?: boolean;
+  onRetry?: () => void;
+}) {
+  if (sending) {
+    return (
+      <span className="inline-flex h-6 items-center rounded-md bg-warning-soft/80 px-1.5 text-[11px] font-medium text-warning ring-1 ring-inset ring-warning/20">
+        Sending…
+      </span>
+    );
+  }
+
+  if (invoice.emailStatus === "FAILED") {
+    return (
+      <span className="inline-flex items-center gap-1.5">
+        <span className="inline-flex h-6 items-center rounded-md bg-danger-soft/80 px-1.5 text-[11px] font-medium text-danger ring-1 ring-inset ring-danger/20">
+          Failed
+        </span>
+        {canSend && invoice.customer.email && onRetry ? (
+          <button
+            type="button"
+            className="text-[11px] font-medium text-primary underline-offset-2 hover:underline"
+            onClick={(event) => {
+              event.stopPropagation();
+              onRetry();
+            }}
+          >
+            Retry
+          </button>
+        ) : null}
+      </span>
+    );
+  }
+
+  if (invoice.viewedAt) {
+    return (
+      <span className="inline-flex h-6 items-center rounded-md bg-sky-50 px-1.5 text-[11px] font-medium text-sky-800 ring-1 ring-inset ring-sky-200/70">
+        Viewed
+      </span>
+    );
+  }
+
+  if (invoice.emailStatus === "SENT" || invoiceEmailAt(invoice)) {
+    return (
+      <span className="inline-flex h-6 items-center rounded-md bg-success-soft/80 px-1.5 text-[11px] font-medium text-success ring-1 ring-inset ring-success/20">
+        Sent
+      </span>
+    );
+  }
+
+  return (
+    <span className="inline-flex h-6 items-center rounded-md bg-muted-soft px-1.5 text-[11px] font-medium text-muted ring-1 ring-inset ring-border">
+      Not sent
+    </span>
+  );
+}
+
+function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }) {
+  return (
+    <span className="inline-flex max-w-full items-center gap-1 rounded-md border border-border bg-muted-soft/60 py-0.5 pl-2 pr-0.5 text-[11px] font-medium text-foreground">
+      <span className="truncate">{label}</span>
+      <button
+        type="button"
+        onClick={onRemove}
+        className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted transition-colors hover:bg-surface hover:text-foreground"
+        aria-label={`Remove filter ${label}`}
+      >
+        <svg viewBox="0 0 12 12" fill="none" className="h-3 w-3" aria-hidden>
+          <path d="M3 3l6 6M9 3L3 9" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+        </svg>
+      </button>
+    </span>
   );
 }
