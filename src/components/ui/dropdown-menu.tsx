@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode ,useLayoutEffect } from "react";
 import { Button } from "@/components/ui/button";
+import { createPortal } from "react-dom";
 
 export interface DropdownItem {
   label: string;
@@ -20,6 +21,29 @@ export function DropdownMenu({ label = "⋯", ariaLabel = "Actions", items }: Dr
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const menuId = useId();
+  const [coords, setCoords] = useState({ top: 0, left: 0 });
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (!open || !buttonRef.current) return;
+  
+    const updatePosition = () => {
+      const rect = buttonRef.current!.getBoundingClientRect();
+      const menuWidth = menuRef.current?.offsetWidth ?? 176;
+      setCoords({
+        top: rect.bottom + window.scrollY + 4,
+        left: rect.right + window.scrollX - menuWidth,
+      });
+    };
+  
+    updatePosition();
+    window.addEventListener("scroll", updatePosition, true);
+    window.addEventListener("resize", updatePosition);
+    return () => {
+      window.removeEventListener("scroll", updatePosition, true);
+      window.removeEventListener("resize", updatePosition);
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) {
@@ -27,7 +51,11 @@ export function DropdownMenu({ label = "⋯", ariaLabel = "Actions", items }: Dr
     }
 
     function onPointerDown(event: MouseEvent) {
-      if (!rootRef.current?.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (
+        !buttonRef.current?.contains(target) &&
+        !menuRef.current?.contains(target)
+      ) {
         setOpen(false);
       }
     }
@@ -47,8 +75,9 @@ export function DropdownMenu({ label = "⋯", ariaLabel = "Actions", items }: Dr
   }, [open]);
 
   return (
-    <div ref={rootRef} className="relative inline-flex">
-      <Button
+    <div className="relative inline-flex">
+    <Button
+        ref={buttonRef}
         variant="ghost"
         size="sm"
         aria-haspopup="menu"
@@ -62,32 +91,36 @@ export function DropdownMenu({ label = "⋯", ariaLabel = "Actions", items }: Dr
       >
         {label}
       </Button>
-      {open ? (
-        <div
-          id={menuId}
-          role="menu"
-          className="absolute right-0 z-30 mt-1 min-w-44 overflow-hidden rounded-xl border border-border bg-surface py-1 shadow-lg"
+      {open &&
+  createPortal(
+    <div
+      ref={menuRef}
+      id={menuId}
+      role="menu"
+      style={{ position: "absolute", top: coords.top, left: coords.left }}
+      className="z-50 min-w-44 overflow-hidden rounded-xl border border-border bg-white py-1 shadow-lg"
+    >
+      {items.map((item) => (
+        <button
+          key={item.label}
+          type="button"
+          role="menuitem"
+          disabled={item.disabled}
+          className={`block w-full px-3 py-2 text-left text-sm disabled:opacity-50 ${
+            item.danger ? "text-primary hover:bg-primary-soft" : "text-foreground hover:bg-muted-soft"
+          }`}
+          onClick={(event) => {
+            event.stopPropagation();
+            setOpen(false);
+            item.onClick();
+          }}
         >
-          {items.map((item) => (
-            <button
-              key={item.label}
-              type="button"
-              role="menuitem"
-              disabled={item.disabled}
-              className={`block w-full px-3 py-2 text-left text-sm disabled:opacity-50 ${
-                item.danger ? "text-primary hover:bg-primary-soft" : "text-foreground hover:bg-muted-soft"
-              }`}
-              onClick={(event) => {
-                event.stopPropagation();
-                setOpen(false);
-                item.onClick();
-              }}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-      ) : null}
+          {item.label}
+        </button>
+      ))}
+    </div>,
+    document.body
+  )}
     </div>
   );
 }
