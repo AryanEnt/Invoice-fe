@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { ActionGroup, DeleteAction, EditAction } from "@/components/ui/action-buttons";
 import { Button } from "@/components/ui/button";
@@ -30,6 +30,7 @@ import type { CatalogStatus, Customer, CustomerFormValues, CustomerListResult } 
 
 export function CustomersPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user } = useAuth();
   const { notify } = useToast();
   const { organizationId, tenantListsReady, scopeLabel } = useWorkspace();
@@ -47,6 +48,14 @@ export function CustomersPage() {
   const [formBusy, setFormBusy] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Customer | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
+
+  useEffect(() => {
+    if (searchParams.get("new") === "1" && canCreate) {
+      setFormMode("create");
+      setEditing(null);
+      router.replace("/customers", { scroll: false });
+    }
+  }, [canCreate, router, searchParams]);
 
   const load = useCallback(async () => {
     if (!tenantListsReady) {
@@ -140,7 +149,6 @@ export function CustomersPage() {
       <PageHeader
         title="Customers"
         description={`People and companies you bill. ${scopeLabel}.`}
-        actions={canCreate ? <Button onClick={() => setFormMode("create")}>Add customer</Button> : undefined}
       />
 
       <form
@@ -192,12 +200,9 @@ export function CustomersPage() {
           description={
             search || status
               ? "Try a different search or clear the filters."
-              : "Add a customer so you can create invoices."
-          }
-          action={
-            canCreate && !search && !status ? (
-              <Button onClick={() => setFormMode("create")}>Add customer</Button>
-            ) : null
+              : canCreate
+                ? "Use Add customer in the top bar to create your first customer."
+                : "Add a customer so you can create invoices."
           }
         />
       ) : (

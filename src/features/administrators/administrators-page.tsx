@@ -2,16 +2,14 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ActionGroup, EditAction, StatusAction } from "@/components/ui/action-buttons";
+import { ActionGroup, EditAction } from "@/components/ui/action-buttons";
 import { Button } from "@/components/ui/button";
 import { DataTable, Table, Td, Th, THead } from "@/components/ui/data-table";
-import { ConfirmDialog } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
-import { Field, SelectInput, TextInput } from "@/components/ui/field";
+import { Field, TextInput } from "@/components/ui/field";
 import { PageHeader } from "@/components/ui/page-header";
 import { Pagination } from "@/components/ui/pagination";
-import { StatusBadge } from "@/components/ui/status-badge";
 import {
   AdministratorForm,
   valuesFromAdmin,
@@ -30,10 +28,8 @@ import {
   listAdmins,
   resetAdminPassword,
   updateAdmin,
-  updateAdminStatus,
 } from "@/services/admins.service";
 import type { AdminFormValues, AdminListResult, AdminUser } from "@/types/admin";
-import type { AccountStatus } from "@/types/auth";
 
 export function AdministratorsPage({ embedded = false }: { embedded?: boolean }) {
   const { user, loading: authLoading } = useAuth();
@@ -45,13 +41,10 @@ export function AdministratorsPage({ embedded = false }: { embedded?: boolean })
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [status, setStatus] = useState<AccountStatus | "">("");
   const [page, setPage] = useState(1);
   const [formMode, setFormMode] = useState<"create" | "edit" | null>(null);
   const [editing, setEditing] = useState<AdminUser | null>(null);
   const [formBusy, setFormBusy] = useState(false);
-  const [statusTarget, setStatusTarget] = useState<AdminUser | null>(null);
-  const [statusBusyId, setStatusBusyId] = useState<string | null>(null);
   const [copyBusyId, setCopyBusyId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -64,7 +57,6 @@ export function AdministratorsPage({ embedded = false }: { embedded?: boolean })
     try {
       const admins = await listAdmins({
         search: search || undefined,
-        status,
         page,
         pageSize: 10,
       });
@@ -75,7 +67,7 @@ export function AdministratorsPage({ embedded = false }: { embedded?: boolean })
     } finally {
       setLoading(false);
     }
-  }, [page, search, status]);
+  }, [page, search]);
 
   useEffect(() => {
     if (!authLoading && user?.role !== "SUPER_ADMIN") {
@@ -129,21 +121,6 @@ export function AdministratorsPage({ embedded = false }: { embedded?: boolean })
     }
   }
 
-  async function handleRevealPassword(admin: AdminUser) {
-    if (passwords[admin.id] ?? getCachedAdminPasswords()[admin.id]) {
-      return;
-    }
-    setCopyBusyId(admin.id);
-    try {
-      await ensurePassword(admin);
-    } catch (err) {
-      notify(err instanceof ApiError ? err.message : "Unable to show password.", "error");
-      throw err;
-    } finally {
-      setCopyBusyId(null);
-    }
-  }
-
   async function handleCreate(values: AdminFormValues) {
     setFormBusy(true);
     try {
@@ -191,31 +168,6 @@ export function AdministratorsPage({ embedded = false }: { embedded?: boolean })
     }
   }
 
-  async function handleStatusChange() {
-    if (!statusTarget) {
-      return;
-    }
-    setStatusBusyId(statusTarget.id);
-    const nextStatus = statusTarget.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
-    try {
-      const updated = await updateAdminStatus(statusTarget.id, nextStatus);
-      setStatusTarget(null);
-      notify(nextStatus === "ACTIVE" ? "Administrator activated" : "Administrator deactivated");
-      setResult((current) =>
-        current
-          ? {
-              ...current,
-              items: current.items.map((item) => (item.id === updated.id ? updated : item)),
-            }
-          : current,
-      );
-    } catch (err) {
-      notify(err instanceof ApiError ? err.message : "Unable to update status.", "error");
-    } finally {
-      setStatusBusyId(null);
-    }
-  }
-
   if (authLoading || user?.role !== "SUPER_ADMIN") {
     return <p className="text-sm text-muted">Checking access…</p>;
   }
@@ -252,22 +204,6 @@ export function AdministratorsPage({ embedded = false }: { embedded?: boolean })
             />
           </Field>
         </div>
-        <div className="w-40">
-          <Field label="Status" htmlFor="admin-status">
-            <SelectInput
-              id="admin-status"
-              value={status}
-              onChange={(event) => {
-                setStatus(event.target.value as AccountStatus | "");
-                setPage(1);
-              }}
-            >
-              <option value="">All statuses</option>
-              <option value="ACTIVE">Active</option>
-              <option value="INACTIVE">Inactive</option>
-            </SelectInput>
-          </Field>
-        </div>
         <Button type="submit" variant="secondary">
           Apply filters
         </Button>
@@ -293,7 +229,6 @@ export function AdministratorsPage({ embedded = false }: { embedded?: boolean })
                 <Th>Name</Th>
                 <Th>Email</Th>
                 <Th>Password</Th>
-                <Th>Status</Th>
                 <Th className="text-right">Actions</Th>
               </tr>
             </THead>
@@ -308,14 +243,9 @@ export function AdministratorsPage({ embedded = false }: { embedded?: boolean })
                   <Td muted>{admin.email}</Td>
                   <Td>
                     <MemberPasswordCell
-                      password={passwords[admin.id] ?? null}
                       copying={copyBusyId === admin.id}
                       onCopy={() => handleCopyPassword(admin)}
-                      onReveal={() => handleRevealPassword(admin)}
                     />
-                  </Td>
-                  <Td>
-                    <StatusBadge status={admin.status} />
                   </Td>
                   <Td className="text-right">
                     <ActionGroup>
@@ -324,12 +254,6 @@ export function AdministratorsPage({ embedded = false }: { embedded?: boolean })
                           setEditing(admin);
                           setFormMode("edit");
                         }}
-                      />
-                      <StatusAction
-                        active={admin.status === "ACTIVE"}
-                        loading={statusBusyId === admin.id}
-                        disabled={Boolean(statusBusyId && statusBusyId !== admin.id)}
-                        onClick={() => setStatusTarget(admin)}
                       />
                     </ActionGroup>
                   </Td>
@@ -363,22 +287,6 @@ export function AdministratorsPage({ embedded = false }: { embedded?: boolean })
             setEditing(null);
           }}
           onSubmit={handleEdit}
-        />
-      ) : null}
-
-      {statusTarget ? (
-        <ConfirmDialog
-          title={statusTarget.status === "ACTIVE" ? "Deactivate Administrator?" : "Activate Administrator?"}
-          message={
-            statusTarget.status === "ACTIVE"
-              ? "Are you sure you want to deactivate this administrator? They will no longer be able to access the system."
-              : `${statusTarget.firstName} ${statusTarget.lastName} will be able to sign in again.`
-          }
-          confirmLabel={statusTarget.status === "ACTIVE" ? "Deactivate" : "Activate"}
-          danger={statusTarget.status === "ACTIVE"}
-          busy={statusBusyId === statusTarget.id}
-          onCancel={() => setStatusTarget(null)}
-          onConfirm={() => void handleStatusChange()}
         />
       ) : null}
     </div>

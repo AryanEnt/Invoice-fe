@@ -124,7 +124,7 @@ function EmailPreview({
                 if (buttonMatch) {
                   return (
                     <div key={`cta-${index}`} className="py-2 text-center">
-                      <span className="inline-block rounded-lg bg-[#d41920] px-7 py-3.5 text-[15px] font-semibold text-white">
+                      <span className="inline-block rounded-lg bg-[#1f7a4d] px-7 py-3.5 text-[15px] font-semibold text-white">
                         {buttonMatch[1] || ctaLabel}
                       </span>
                     </div>

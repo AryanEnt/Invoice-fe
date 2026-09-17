@@ -17,9 +17,10 @@ import {
   invoiceEmailAt,
 } from "@/features/invoices/invoice-activity";
 import { InvoiceBoard, type InvoiceBoardColumnId } from "@/features/invoices/invoice-board";
+
+type InvoiceListBoardFilter = InvoiceBoardColumnId | "outstanding";
 import { InvoiceQuickDrawer } from "@/features/invoices/invoice-quick-drawer";
 import { InvoiceRowActions } from "@/features/invoices/invoice-row-actions";
-import { InvoiceStatusPill } from "@/features/invoices/invoice-status-pill";
 import { SendingEmailOverlay } from "@/features/invoices/sending-email-overlay";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { cn } from "@/lib/cn";
@@ -104,12 +105,33 @@ export function InvoicesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [status, setStatus] = useState<InvoiceStatus | "">("");
+  const [status, setStatus] = useState<InvoiceStatus | "">(() => {
+    if (searchParams.get("boardColumn")) return "";
+    const statusParam = searchParams.get("status");
+    return statusParam && statuses.includes(statusParam as InvoiceStatus)
+      ? (statusParam as InvoiceStatus)
+      : "";
+  });
+  const [boardColumn, setBoardColumn] = useState<InvoiceListBoardFilter | "">(() => {
+    const value = searchParams.get("boardColumn");
+    return value === "new" ||
+      value === "sent" ||
+      value === "overdue" ||
+      value === "paid" ||
+      value === "outstanding"
+      ? value
+      : "";
+  });
   const [activityFilter, setActivityFilter] = useState<ActivityFilter>("");
   const [customerId, setCustomerId] = useState("");
   const [administratorId, setAdministratorId] = useState("");
   const [assignedMemberId, setAssignedMemberId] = useState("");
-  const [datePreset, setDatePreset] = useState<InvoiceDatePreset>("this_month");
+  const [datePreset, setDatePreset] = useState<InvoiceDatePreset>(() => {
+    const value = searchParams.get("datePreset");
+    return value && (INVOICE_DATE_PRESETS as readonly string[]).includes(value)
+      ? (value as InvoiceDatePreset)
+      : "this_month";
+  });
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
   const [sort, setSort] = useState("createdAt");
@@ -136,19 +158,46 @@ export function InvoicesPage() {
 
   useEffect(() => {
     const statusParam = searchParams.get("status");
-    if (statusParam && statuses.includes(statusParam as InvoiceStatus)) {
+    const boardColumnParam = searchParams.get("boardColumn");
+    const datePresetParam = searchParams.get("datePreset");
+
+    if (
+      boardColumnParam === "new" ||
+      boardColumnParam === "sent" ||
+      boardColumnParam === "overdue" ||
+      boardColumnParam === "paid" ||
+      boardColumnParam === "outstanding"
+    ) {
+      setBoardColumn(boardColumnParam);
+      setStatus("");
+      setView("list");
+      window.sessionStorage.setItem(VIEW_STORAGE_KEY, "list");
+      setPage(1);
+    } else if (statusParam && statuses.includes(statusParam as InvoiceStatus)) {
+      setBoardColumn("");
       setStatus(statusParam as InvoiceStatus);
+      setView("list");
+      window.sessionStorage.setItem(VIEW_STORAGE_KEY, "list");
+      setPage(1);
+    }
+
+    if (
+      datePresetParam &&
+      (INVOICE_DATE_PRESETS as readonly string[]).includes(datePresetParam)
+    ) {
+      setDatePreset(datePresetParam as InvoiceDatePreset);
       setPage(1);
     }
   }, [searchParams]);
 
   const activeFilterCount = [
     status,
+    boardColumn,
     activityFilter,
     customerId,
     administratorId,
     assignedMemberId,
-    datePreset !== "this_month" && datePreset !== "all_time" ? datePreset : "",
+    datePreset !== "this_month" ? datePreset : "",
     datePreset === "custom" && (customFrom || customTo) ? "custom" : "",
   ].filter(Boolean).length;
   const hasFilters = Boolean(debouncedSearch || activeFilterCount);
@@ -216,7 +265,8 @@ export function InvoicesPage() {
       const [invoices, customerResult, summaryResult] = await Promise.all([
         listInvoices({
           search: debouncedSearch || undefined,
-          status,
+          status: boardColumn ? "" : status,
+          boardColumn: boardColumn || undefined,
           customerId: customerId || undefined,
           organizationId: organizationId || undefined,
           administratorId: isSuperAdmin && administratorId ? administratorId : undefined,
@@ -246,6 +296,7 @@ export function InvoicesPage() {
   }, [
     administratorId,
     assignedMemberId,
+    boardColumn,
     customerId,
     customFrom,
     customTo,
@@ -292,6 +343,7 @@ export function InvoicesPage() {
   function clearFilters() {
     setSearch("");
     setStatus("");
+    setBoardColumn("");
     setActivityFilter("");
     setCustomerId("");
     setAdministratorId("");
@@ -302,14 +354,51 @@ export function InvoicesPage() {
     setSort("createdAt");
     setSortDir("desc");
     setPage(1);
+    router.replace("/invoices");
   }
 
   function handleViewAll(_column: InvoiceBoardColumnId, listStatus: InvoiceStatus | "") {
+    setBoardColumn("");
     setStatus(listStatus);
     setPage(1);
     changeView("list");
     setFiltersOpen(true);
   }
+
+  function applyMetricFilter(metric: "all" | "draft" | "outstanding" | "paid") {
+    changeView("list");
+    setPage(1);
+    setActivityFilter("");
+    switch (metric) {
+      case "all":
+        setStatus("");
+        setBoardColumn("");
+        break;
+      case "draft":
+        setBoardColumn("");
+        setStatus("DRAFT");
+        break;
+      case "outstanding":
+        setStatus("");
+        setBoardColumn("outstanding");
+        break;
+      case "paid":
+        setBoardColumn("");
+        setStatus("PAID");
+        break;
+    }
+  }
+
+  const activeMetric: "all" | "draft" | "outstanding" | "paid" | null =
+    !status && !boardColumn
+      ? "all"
+      : status === "DRAFT" && !boardColumn
+        ? "draft"
+        : boardColumn === "outstanding"
+          ? "outstanding"
+          : status === "PAID" && !boardColumn
+            ? "paid"
+            : null;
 
   async function handleCopyLink(invoice: Invoice) {
     setCopyBusyId(invoice.id);
@@ -463,6 +552,8 @@ export function InvoicesPage() {
             label="Total"
             value={summary.all}
             tone="neutral"
+            selected={activeMetric === "all"}
+            onClick={() => applyMetricFilter("all")}
             icon={
               <svg viewBox="0 0 16 16" fill="none" className="h-3.5 w-3.5" aria-hidden>
                 <rect x="2.5" y="3" width="11" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.3" />
@@ -474,6 +565,8 @@ export function InvoicesPage() {
             label="Draft"
             value={summary.notSent.count}
             tone="draft"
+            selected={activeMetric === "draft"}
+            onClick={() => applyMetricFilter("draft")}
             icon={
               <svg viewBox="0 0 16 16" fill="none" className="h-3.5 w-3.5" aria-hidden>
                 <path
@@ -490,6 +583,8 @@ export function InvoicesPage() {
             label="Outstanding"
             value={summary.outstanding}
             tone="outstanding"
+            selected={activeMetric === "outstanding"}
+            onClick={() => applyMetricFilter("outstanding")}
             icon={
               <svg viewBox="0 0 16 16" fill="none" className="h-3.5 w-3.5" aria-hidden>
                 <circle cx="8" cy="8" r="5.2" stroke="currentColor" strokeWidth="1.2" />
@@ -501,6 +596,8 @@ export function InvoicesPage() {
             label="Paid"
             value={summary.paidInvoices.count}
             tone="paid"
+            selected={activeMetric === "paid"}
+            onClick={() => applyMetricFilter("paid")}
             icon={
               <svg viewBox="0 0 16 16" fill="none" className="h-3.5 w-3.5" aria-hidden>
                 <circle cx="8" cy="8" r="5.2" stroke="currentColor" strokeWidth="1.2" />
@@ -554,15 +651,36 @@ export function InvoicesPage() {
               </label>
               <SelectInput
                 id="invoice-status"
-                className={cn(filterControlClass, status && "border-border bg-muted-soft/60")}
-                value={status}
+                className={cn(
+                  filterControlClass,
+                  (status || boardColumn) && "border-border bg-muted-soft/60",
+                )}
+                value={
+                  boardColumn === "sent"
+                    ? "__awaiting__"
+                    : boardColumn === "outstanding"
+                      ? "__outstanding__"
+                      : status
+                }
                 aria-label="Status filter"
                 onChange={(event) => {
-                  setStatus(event.target.value as InvoiceStatus | "");
+                  const next = event.target.value;
+                  if (next === "__awaiting__") {
+                    setBoardColumn("sent");
+                    setStatus("");
+                  } else if (next === "__outstanding__") {
+                    setBoardColumn("outstanding");
+                    setStatus("");
+                  } else {
+                    setBoardColumn("");
+                    setStatus(next as InvoiceStatus | "");
+                  }
                   setPage(1);
                 }}
               >
                 <option value="">Status</option>
+                <option value="__awaiting__">Awaiting payment</option>
+                <option value="__outstanding__">Outstanding</option>
                 {statuses.map((value) => (
                   <option key={value} value={value}>
                     {statusLabel(value)}
@@ -761,6 +879,24 @@ export function InvoicesPage() {
 
         {hasFilters ? (
           <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+            {boardColumn === "sent" ? (
+              <FilterChip
+                label="Status: Awaiting payment"
+                onRemove={() => {
+                  setBoardColumn("");
+                  setPage(1);
+                }}
+              />
+            ) : null}
+            {boardColumn === "outstanding" ? (
+              <FilterChip
+                label="Status: Outstanding"
+                onRemove={() => {
+                  setBoardColumn("");
+                  setPage(1);
+                }}
+              />
+            ) : null}
             {status ? (
               <FilterChip
                 label={`Status: ${statusLabel(status)}`}
@@ -857,7 +993,7 @@ export function InvoicesPage() {
           />
         )
       ) : loading && !result ? (
-        <TableSkeleton cols={8} />
+        <TableSkeleton cols={6} />
       ) : error && !result ? (
         <ErrorState title="We couldn't load your invoices." message={error} onRetry={() => void loadList()} />
       ) : !result || visibleItems.length === 0 ? (
@@ -902,8 +1038,6 @@ export function InvoicesPage() {
                     <Th className="px-3 py-2.5">Issue date</Th>
                     <Th className="px-3 py-2.5">Due date</Th>
                     <Th className="px-3 py-2.5 text-right">Amount</Th>
-                    <Th className="px-3 py-2.5">Status</Th>
-                    <Th className="px-3 py-2.5">Email status</Th>
                     <Th className="w-12 px-2 py-2.5 text-right"> </Th>
                   </tr>
                 </THead>
@@ -930,19 +1064,6 @@ export function InvoicesPage() {
                       </Td>
                       <Td className="px-3 py-2.5 text-right text-sm font-semibold tabular-nums text-foreground">
                         {formatMoney(invoice.total, invoice.currency)}
-                      </Td>
-                      <Td className="px-3 py-2.5">
-                        <InvoiceStatusPill status={invoice.status} />
-                      </Td>
-                      <Td className="px-3 py-2.5">
-                        <div onClick={(event) => event.stopPropagation()}>
-                          <CompactEmailStatus
-                            invoice={invoice}
-                            sending={sendingId === invoice.id}
-                            canSend={canSend}
-                            onRetry={() => setEmailTarget(invoice)}
-                          />
-                        </div>
                       </Td>
                       <Td className="px-2 py-2.5 text-right">
                         <div onClick={(event) => event.stopPropagation()}>
@@ -979,22 +1100,19 @@ export function InvoicesPage() {
                     <p className="text-sm font-semibold text-foreground">{invoice.invoiceNumber}</p>
                     <p className="mt-0.5 truncate text-sm text-foreground">{invoice.customer.name}</p>
                   </div>
-                  <div className="flex shrink-0 items-center gap-1.5">
-                    <InvoiceStatusPill status={invoice.status} />
-                    <div onClick={(event) => event.stopPropagation()}>
-                      <InvoiceRowActions
-                        invoice={invoice}
-                        canSend={canSend}
-                        canUpdate={canUpdate}
-                        canDelete={canDelete}
-                        copyBusy={copyBusyId === invoice.id}
-                        onView={() => setDrawerInvoice(invoice)}
-                        onCopyLink={() => void handleCopyLink(invoice)}
-                        onSendEmail={() => setEmailTarget(invoice)}
-                        onEdit={() => router.push(`/invoices/${invoice.id}/edit`)}
-                        onDelete={() => setDeleteTarget(invoice)}
-                      />
-                    </div>
+                  <div onClick={(event) => event.stopPropagation()}>
+                    <InvoiceRowActions
+                      invoice={invoice}
+                      canSend={canSend}
+                      canUpdate={canUpdate}
+                      canDelete={canDelete}
+                      copyBusy={copyBusyId === invoice.id}
+                      onView={() => setDrawerInvoice(invoice)}
+                      onCopyLink={() => void handleCopyLink(invoice)}
+                      onSendEmail={() => setEmailTarget(invoice)}
+                      onEdit={() => router.push(`/invoices/${invoice.id}/edit`)}
+                      onDelete={() => setDeleteTarget(invoice)}
+                    />
                   </div>
                 </div>
                 <div className="mt-2 flex items-end justify-between gap-3">
@@ -1005,14 +1123,6 @@ export function InvoicesPage() {
                   <p className="text-sm font-semibold tabular-nums text-foreground">
                     {formatMoney(invoice.total, invoice.currency)}
                   </p>
-                </div>
-                <div className="mt-2 border-t border-border/80 pt-2" onClick={(e) => e.stopPropagation()}>
-                  <CompactEmailStatus
-                    invoice={invoice}
-                    sending={sendingId === invoice.id}
-                    canSend={canSend}
-                    onRetry={() => setEmailTarget(invoice)}
-                  />
                 </div>
               </article>
             ))}
@@ -1119,37 +1229,55 @@ function Metric({
   value,
   tone,
   icon,
+  selected,
+  onClick,
 }: {
   label: string;
   value: number;
   tone: "neutral" | "draft" | "outstanding" | "paid";
   icon: ReactNode;
+  selected?: boolean;
+  onClick?: () => void;
 }) {
   const toneStyles = {
     neutral: {
       card: "border-border bg-surface",
       icon: "bg-muted-soft text-muted",
       value: "text-foreground",
+      selected: "ring-2 ring-foreground/15 border-foreground/20",
     },
     draft: {
       card: "border-sky-100 bg-sky-50/40",
       icon: "bg-sky-100/80 text-sky-700",
       value: "text-sky-900",
+      selected: "ring-2 ring-sky-300/70 border-sky-300",
     },
     outstanding: {
       card: "border-warning/15 bg-warning-soft/40",
       icon: "bg-warning-soft text-warning",
       value: "text-warning",
+      selected: "ring-2 ring-warning/40 border-warning/40",
     },
     paid: {
       card: "border-success/15 bg-success-soft/50",
       icon: "bg-success-soft text-success",
       value: "text-success",
+      selected: "ring-2 ring-success/40 border-success/40",
     },
   }[tone];
 
   return (
-    <div className={cn("rounded-[10px] border px-3 py-2.5", toneStyles.card)}>
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={selected}
+      className={cn(
+        "w-full cursor-pointer rounded-[10px] border px-3 py-2.5 text-left transition",
+        "hover:brightness-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
+        toneStyles.card,
+        selected && toneStyles.selected,
+      )}
+    >
       <div className="flex items-center justify-between gap-2">
         <p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted">{label}</p>
         <span
@@ -1164,71 +1292,7 @@ function Metric({
       <p className={cn("mt-1 text-2xl font-semibold tabular-nums tracking-tight", toneStyles.value)}>
         {value}
       </p>
-    </div>
-  );
-}
-
-function CompactEmailStatus({
-  invoice,
-  sending,
-  canSend,
-  onRetry,
-}: {
-  invoice: Invoice;
-  sending?: boolean;
-  canSend?: boolean;
-  onRetry?: () => void;
-}) {
-  if (sending) {
-    return (
-      <span className="inline-flex h-6 items-center rounded-md bg-warning-soft/80 px-1.5 text-[11px] font-medium text-warning ring-1 ring-inset ring-warning/20">
-        Sending…
-      </span>
-    );
-  }
-
-  if (invoice.emailStatus === "FAILED") {
-    return (
-      <span className="inline-flex items-center gap-1.5">
-        <span className="inline-flex h-6 items-center rounded-md bg-danger-soft/80 px-1.5 text-[11px] font-medium text-danger ring-1 ring-inset ring-danger/20">
-          Failed
-        </span>
-        {canSend && invoice.customer.email && onRetry ? (
-          <button
-            type="button"
-            className="text-[11px] font-medium text-primary underline-offset-2 hover:underline"
-            onClick={(event) => {
-              event.stopPropagation();
-              onRetry();
-            }}
-          >
-            Retry
-          </button>
-        ) : null}
-      </span>
-    );
-  }
-
-  if (invoice.viewedAt) {
-    return (
-      <span className="inline-flex h-6 items-center rounded-md bg-sky-50 px-1.5 text-[11px] font-medium text-sky-800 ring-1 ring-inset ring-sky-200/70">
-        Viewed
-      </span>
-    );
-  }
-
-  if (invoice.emailStatus === "SENT" || invoiceEmailAt(invoice)) {
-    return (
-      <span className="inline-flex h-6 items-center rounded-md bg-success-soft/80 px-1.5 text-[11px] font-medium text-success ring-1 ring-inset ring-success/20">
-        Sent
-      </span>
-    );
-  }
-
-  return (
-    <span className="inline-flex h-6 items-center rounded-md bg-muted-soft px-1.5 text-[11px] font-medium text-muted ring-1 ring-inset ring-border">
-      Not sent
-    </span>
+    </button>
   );
 }
 

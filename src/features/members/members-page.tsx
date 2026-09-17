@@ -180,21 +180,6 @@ export function MembersPage({ embedded = false }: { embedded?: boolean }) {
     }
   }
 
-  async function handleRevealPassword(member: MemberUser) {
-    if (passwords[member.id] ?? getCachedMemberPasswords()[member.id]) {
-      return;
-    }
-    setCopyBusyId(member.id);
-    try {
-      await ensurePassword(member);
-    } catch (err) {
-      notify(err instanceof ApiError ? err.message : "Unable to show password.", "error");
-      throw err;
-    } finally {
-      setCopyBusyId(null);
-    }
-  }
-
   async function handleCreate(values: MemberFormValues) {
     setFormBusy(true);
     try {
@@ -407,10 +392,8 @@ export function MembersPage({ embedded = false }: { embedded?: boolean }) {
                   ) : null}
                   <Td>
                     <MemberPasswordCell
-                      password={passwords[member.id] ?? null}
                       copying={copyBusyId === member.id}
                       onCopy={() => handleCopyPassword(member)}
-                      onReveal={() => handleRevealPassword(member)}
                     />
                   </Td>
                   <Td>
