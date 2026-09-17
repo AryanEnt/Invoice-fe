@@ -145,7 +145,10 @@ export function AdminBrandingSection() {
 
             <div>
               <h3 className="text-sm font-medium text-foreground">Company Logo</h3>
-              <p className="mt-1 text-xs text-muted">PNG, JPG, SVG, or WebP · max 2MB</p>
+              <p className="mt-1 text-xs text-muted">
+                Recommended size: 200×72 px (or 400×144 px for sharper email/PDF). PNG, JPG, or WebP · max
+                2MB. Wide logos work best.
+              </p>
 
               <div className="mt-3 flex h-36 w-full max-w-md items-center justify-center rounded-xl border border-dashed border-border bg-muted-soft/40 p-4">
                 {branding?.companyLogoUrl ? (

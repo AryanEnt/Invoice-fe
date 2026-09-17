@@ -136,7 +136,10 @@ export function InvoiceSettingsPage() {
           {canManageLogo ? (
           <section className="rounded-2xl border border-border bg-surface px-5 py-5">
             <h2 className="text-sm font-semibold text-foreground">Company Logo</h2>
-            <p className="mt-1 text-xs text-muted">Recommended: PNG, JPG, SVG or WebP · max 2MB</p>
+            <p className="mt-1 text-xs text-muted">
+              Recommended size: 200×72 px (or 400×144 px for sharper email/PDF). PNG, JPG, SVG or WebP ·
+              max 2MB. Wide logos work best.
+            </p>
             <div className="mt-4 flex h-40 w-full max-w-md items-center justify-center rounded-xl border border-dashed border-border bg-muted-soft/40 p-4">
               {settings.logoUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element

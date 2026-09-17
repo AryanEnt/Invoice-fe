@@ -28,7 +28,7 @@ function invoicePayload(values: InvoiceFormValues, options?: { includeOrganizati
 export async function listInvoices(query: {
   search?: string;
   status?: InvoiceStatus | "";
-  boardColumn?: "new" | "sent" | "overdue" | "paid";
+  boardColumn?: "new" | "sent" | "overdue" | "paid" | "outstanding";
   customerId?: string;
   organizationId?: string;
   administratorId?: string;
@@ -122,6 +122,19 @@ export async function createPublicStripeCheckout(token: string): Promise<{ check
   });
 }
 
+export async function confirmPublicStripeCheckout(token: string): Promise<{
+  paid: boolean;
+  invoiceNumber: string;
+  amount: string;
+  currency: string;
+  transactionId: string | null;
+}> {
+  return apiRequest(`/api/public/invoices/${token}/stripe/confirm-checkout`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
 export async function capturePublicPayPalOrder(
   token: string,
   orderId: string,
@@ -172,17 +185,24 @@ export async function recordInvoicePayment(
 }
 
 export async function downloadInvoicePdf(id: string, invoiceNumber: string): Promise<void> {
-  const response = await fetch(`${getApiBaseUrl()}/api/invoices/${id}/pdf`, {
+  const url = `${getApiBaseUrl()}/api/invoices/${id}/pdf`;
+  const headers = new Headers();
+  // Free ngrok interstitial omits CORS headers; same skip as apiRequest.
+  if (url.includes("ngrok")) {
+    headers.set("ngrok-skip-browser-warning", "true");
+  }
+  const response = await fetch(url, {
     credentials: "include",
+    headers,
   });
   if (!response.ok) {
     throw new ApiError(response.status, "PDF_ERROR", "Unable to download invoice PDF.");
   }
   const blob = await response.blob();
-  const url = URL.createObjectURL(blob);
+  const objectUrl = URL.createObjectURL(blob);
   const link = document.createElement("a");
-  link.href = url;
+  link.href = objectUrl;
   link.download = `${invoiceNumber}.pdf`;
   link.click();
-  URL.revokeObjectURL(url);
+  URL.revokeObjectURL(objectUrl);
 }

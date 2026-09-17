@@ -35,18 +35,23 @@ export async function getReport(query: ReportQuery): Promise<Report> {
 }
 
 export async function downloadReportCsv(query: ReportQuery): Promise<void> {
-  const response = await fetch(
-    `${getApiBaseUrl()}/api/reports/${query.kind}/csv?${queryString(query)}`,
-    { credentials: "include" },
-  );
+  const url = `${getApiBaseUrl()}/api/reports/${query.kind}/csv?${queryString(query)}`;
+  const headers = new Headers();
+  if (url.includes("ngrok")) {
+    headers.set("ngrok-skip-browser-warning", "true");
+  }
+  const response = await fetch(url, {
+    credentials: "include",
+    headers,
+  });
   if (!response.ok) {
     throw new ApiError(response.status, "CSV_ERROR", "Unable to export report.");
   }
   const blob = await response.blob();
-  const url = URL.createObjectURL(blob);
+  const objectUrl = URL.createObjectURL(blob);
   const link = document.createElement("a");
-  link.href = url;
+  link.href = objectUrl;
   link.download = `${query.kind}-${query.preset}.csv`;
   link.click();
-  URL.revokeObjectURL(url);
+  URL.revokeObjectURL(objectUrl);
 }

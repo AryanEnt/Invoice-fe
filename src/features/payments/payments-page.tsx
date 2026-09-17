@@ -9,6 +9,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { Field, SelectInput, TextInput } from "@/components/ui/field";
 import { PageHeader } from "@/components/ui/page-header";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { Pagination } from "@/components/ui/pagination";
 import { formatMoney } from "@/lib/invoice-calc";
 import { ApiError } from "@/lib/api/types";
@@ -20,7 +21,7 @@ import { listInvoices } from "@/services/invoices.service";
 import { listPayments } from "@/services/payments.service";
 import type { Customer } from "@/types/catalog";
 import type { Invoice } from "@/types/invoice";
-import type { PaymentListResult, PaymentRecordStatus } from "@/types/payment";
+import type { Payment, PaymentListResult, PaymentRecordStatus } from "@/types/payment";
 import { RecordPaymentDialog } from "./record-payment-dialog";
 
 const statuses: PaymentRecordStatus[] = [
@@ -30,6 +31,16 @@ const statuses: PaymentRecordStatus[] = [
   "REFUNDED",
   "CANCELLED",
 ];
+
+function formatPaymentMethod(payment: Payment): string {
+  if (payment.provider === "STRIPE") {
+    return "Stripe";
+  }
+  if (payment.provider === "PAYPAL") {
+    return "PayPal";
+  }
+  return payment.method.replaceAll("_", " ");
+}
 
 export function PaymentsPage() {
   const { user } = useAuth();
@@ -43,7 +54,7 @@ export function PaymentsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [status, setStatus] = useState<PaymentRecordStatus | "">("");
+  const [status, setStatus] = useState<PaymentRecordStatus | "">("COMPLETED");
   const [customerId, setCustomerId] = useState("");
   const [invoiceId, setInvoiceId] = useState("");
   const [dateFrom, setDateFrom] = useState("");
@@ -225,7 +236,11 @@ export function PaymentsPage() {
         <ErrorState title="We couldn't load your payments." message={error} onRetry={() => void load()} />
       ) : !result || result.items.length === 0 ? (
         <EmptyState
-          title={search || status ? "No payments match these filters" : "No payments yet"}
+          title={
+            search || status !== "COMPLETED" || customerId || invoiceId || dateFrom || dateTo
+              ? "No payments match these filters"
+              : "No payments yet"
+          }
           description="Payments appear here after a customer pays an invoice."
         />
       ) : (
@@ -240,6 +255,7 @@ export function PaymentsPage() {
                 <Th>Customer</Th>
                 <Th>Amount</Th>
                 <Th>Method</Th>
+                <Th>Status</Th>
               </tr>
             </THead>
             <tbody>
@@ -253,7 +269,10 @@ export function PaymentsPage() {
                   </Td>
                   <Td muted>{payment.customer.name}</Td>
                   <Td muted>{formatMoney(payment.amount, payment.currency)}</Td>
-                  <Td muted>{payment.method.replaceAll("_", " ")}</Td>
+                  <Td muted>{formatPaymentMethod(payment)}</Td>
+                  <Td>
+                    <StatusBadge status={payment.status} />
+                  </Td>
                 </tr>
               ))}
             </tbody>

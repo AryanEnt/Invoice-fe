@@ -9,7 +9,7 @@ import { formatMoney } from "@/lib/invoice-calc";
 import { ApiError } from "@/lib/api/types";
 import {
   capturePublicPayPalOrder,
-  createPublicPayPalOrder,
+  confirmPublicStripeCheckout,
   createPublicStripeCheckout,
   getPublicInvoice,
   getPublicInvoicePaymentStatus,
@@ -126,7 +126,24 @@ export function PublicInvoicePage({ token }: { token: string }) {
         void (async () => {
           setPayBusy(true);
           try {
+            const result = await confirmPublicStripeCheckout(token);
+            setCaptureResult({
+              amount: result.amount,
+              currency: result.currency,
+              transactionId: result.transactionId,
+            });
+            if (!result.paid) {
+              for (let i = 0; i < 8; i += 1) {
+                await new Promise((resolve) => window.setTimeout(resolve, 1500));
+                const status = await getPublicInvoicePaymentStatus(token);
+                if (status.paymentStatus === "COMPLETED") break;
+              }
+            }
             await load();
+          } catch (err) {
+            setPayError(
+              err instanceof ApiError ? err.message : "Payment could not be confirmed. Please wait a moment and refresh.",
+            );
           } finally {
             setPayBusy(false);
             clean();
@@ -135,22 +152,7 @@ export function PublicInvoicePage({ token }: { token: string }) {
       }
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [load]);
-
-  async function handlePayPal() {
-    setPayBusy(true);
-    setPayError(null);
-    setPayMessage(null);
-    try {
-      const { checkoutUrl } = await createPublicPayPalOrder(token);
-      window.location.assign(checkoutUrl);
-    } catch (err) {
-      setPayBusy(false);
-      setPayError(
-        err instanceof ApiError ? err.message : "Payment could not be completed. Please try again.",
-      );
-    }
-  }
+  }, [load, token]);
 
   async function handleStripe() {
     setPayBusy(true);
@@ -190,8 +192,9 @@ export function PublicInvoicePage({ token }: { token: string }) {
   const paid = invoice.paymentStatus === "PAID";
   const paypal = invoice.paypal;
   const stripe = invoice.stripe;
-  const showPaymentMethods = !paid && (Boolean(stripe?.available) || Boolean(paypal?.available));
-  const paymentMessage = !paid && !showPaymentMethods ? (stripe?.message ?? paypal?.message) : null;
+  // PayPal is kept in Payment Gateway settings but not shown on client invoices.
+  const showPaymentMethods = !paid && Boolean(stripe?.available);
+  const paymentMessage = !paid && !showPaymentMethods ? (stripe?.message ?? null) : null;
 
   return (
     <main className="mx-auto w-full max-w-3xl px-4 py-10">
@@ -303,12 +306,7 @@ export function PublicInvoicePage({ token }: { token: string }) {
             <div className="mt-4 flex flex-wrap gap-2">
               {stripe?.available ? (
                 <Button disabled={payBusy} onClick={() => void handleStripe()}>
-                  {payBusy ? "Connecting to Stripe…" : "Pay with Card (Stripe)"}
-                </Button>
-              ) : null}
-              {paypal?.available ? (
-                <Button disabled={payBusy} onClick={() => void handlePayPal()}>
-                  {payBusy ? "Connecting to PayPal…" : "Pay with PayPal"}
+                  {payBusy ? "Connecting…" : "Pay with Card"}
                 </Button>
               ) : null}
             </div>

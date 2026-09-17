@@ -75,9 +75,12 @@ export async function createCustomer(values: CustomerFormValues): Promise<Custom
 }
 
 export async function updateCustomer(id: string, values: CustomerFormValues): Promise<Customer> {
+  const { organizationId: _organizationId, ...body } = customerPayload(values, {
+    clearEmptyAddresses: true,
+  });
   const data = await apiRequest<{ customer: Customer }>(`/api/customers/${id}`, {
     method: "PATCH",
-    body: JSON.stringify(customerPayload(values, { clearEmptyAddresses: true })),
+    body: JSON.stringify(body),
   });
   return customerSchema.parse(data.customer);
 }

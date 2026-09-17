@@ -151,7 +151,10 @@ export function SettingsPage() {
 
           <div className="mt-5">
             <h3 className="text-sm font-medium text-foreground">Organization Logo</h3>
-            <p className="mt-1 text-xs text-muted">Recommended: PNG, JPG, SVG or WebP · max 2MB</p>
+            <p className="mt-1 text-xs text-muted">
+              Recommended size: 200×72 px (or 400×144 px for sharper email/PDF). PNG, JPG, SVG or WebP ·
+              max 2MB. Wide logos work best.
+            </p>
 
             {logoLoading ? (
               <p className="mt-4 text-sm text-muted">Loading logo…</p>
