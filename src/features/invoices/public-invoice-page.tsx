@@ -83,8 +83,12 @@ export function PublicInvoicePage({ token }: { token: string }) {
             if (!result.paid) {
               for (let i = 0; i < 8; i += 1) {
                 await new Promise((resolve) => window.setTimeout(resolve, 1500));
-                const status = await getPublicInvoicePaymentStatus(token);
-                if (status.paymentStatus === "COMPLETED") break;
+                try {
+                  const status = await getPublicInvoicePaymentStatus(token);
+                  if (status.paymentStatus === "COMPLETED") break;
+                } catch (pollErr) {
+                  if (pollErr instanceof ApiError && pollErr.isRateLimited) break;
+                }
               }
             }
             await load();
@@ -135,8 +139,12 @@ export function PublicInvoicePage({ token }: { token: string }) {
             if (!result.paid) {
               for (let i = 0; i < 8; i += 1) {
                 await new Promise((resolve) => window.setTimeout(resolve, 1500));
-                const status = await getPublicInvoicePaymentStatus(token);
-                if (status.paymentStatus === "COMPLETED") break;
+                try {
+                  const status = await getPublicInvoicePaymentStatus(token);
+                  if (status.paymentStatus === "COMPLETED") break;
+                } catch (pollErr) {
+                  if (pollErr instanceof ApiError && pollErr.isRateLimited) break;
+                }
               }
             }
             await load();

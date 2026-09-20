@@ -83,7 +83,11 @@ export function InvoiceDetailPage({ invoiceId }: InvoiceDetailPageProps) {
     const timer = window.setInterval(() => {
       void getInvoice(invoiceId)
         .then((next) => setInvoice(next))
-        .catch(() => undefined);
+        .catch((err) => {
+          if (err instanceof ApiError && err.isRateLimited) {
+            window.clearInterval(timer);
+          }
+        });
     }, 15_000);
     return () => window.clearInterval(timer);
   }, [invoice?.status, invoiceId]);

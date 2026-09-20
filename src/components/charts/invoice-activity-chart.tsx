@@ -72,10 +72,37 @@ export function InvoiceActivityChart({
             width={36}
           />
           <Tooltip contentStyle={tooltipStyle} />
-          <Legend />
-          <Line type="monotone" dataKey="created" name="Created" stroke={CHART_COLORS.primary} strokeWidth={2} dot={false} />
-          <Line type="monotone" dataKey="sent" name="Sent" stroke={CHART_COLORS.pending} strokeWidth={2} dot={false} />
-          <Line type="monotone" dataKey="paid" name="Paid" stroke={CHART_COLORS.paid} strokeWidth={2} dot={false} />
+          <Legend
+            iconType="circle"
+            formatter={(value) => <span className="text-xs text-foreground/80">{value}</span>}
+          />
+          <Line
+            type="monotone"
+            dataKey="created"
+            name="Created"
+            stroke={CHART_COLORS.info}
+            strokeWidth={2.25}
+            dot={false}
+            activeDot={{ r: 4 }}
+          />
+          <Line
+            type="monotone"
+            dataKey="sent"
+            name="Sent"
+            stroke={CHART_COLORS.tertiary}
+            strokeWidth={2.25}
+            dot={false}
+            activeDot={{ r: 4 }}
+          />
+          <Line
+            type="monotone"
+            dataKey="paid"
+            name="Paid"
+            stroke={CHART_COLORS.paid}
+            strokeWidth={2.25}
+            dot={false}
+            activeDot={{ r: 4 }}
+          />
         </LineChart>
       </ResponsiveContainer>
     </ChartCard>

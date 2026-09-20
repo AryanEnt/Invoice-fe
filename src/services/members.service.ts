@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { apiRequest } from "@/lib/api/client";
+import { clampPageSize, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from "@/lib/pagination";
 import { administratorSummarySchema, memberListResultSchema, memberUserSchema } from "@/schemas/member";
 import type { AdministratorSummary, MemberFormValues, MemberListResult, MemberUser } from "@/types/member";
 import type { AccountStatus } from "@/types/auth";
@@ -17,8 +18,6 @@ export async function listMemberAdministrators(): Promise<{
   };
 }
 
-const MEMBER_LIST_MAX_PAGE_SIZE = 50;
-
 export async function listMembers(query: {
   search?: string;
   status?: AccountStatus | "";
@@ -33,17 +32,14 @@ export async function listMembers(query: {
   if (query.organizationId) params.set("organizationId", query.organizationId);
   if (query.administratorId) params.set("administratorId", query.administratorId);
   params.set("page", String(query.page ?? 1));
-  params.set(
-    "pageSize",
-    String(Math.min(query.pageSize ?? 10, MEMBER_LIST_MAX_PAGE_SIZE)),
-  );
+  params.set("pageSize", String(clampPageSize(query.pageSize, MAX_PAGE_SIZE, DEFAULT_PAGE_SIZE)));
   return memberListResultSchema.parse(await apiRequest<MemberListResult>(`/api/members?${params}`));
 }
 
 export async function listAllMembers(
   query: Omit<Parameters<typeof listMembers>[0], "page" | "pageSize">,
 ): Promise<MemberUser[]> {
-  const pageSize = MEMBER_LIST_MAX_PAGE_SIZE;
+  const pageSize = MAX_PAGE_SIZE;
   const first = await listMembers({ ...query, page: 1, pageSize });
   if (first.totalPages <= 1) {
     return first.items;

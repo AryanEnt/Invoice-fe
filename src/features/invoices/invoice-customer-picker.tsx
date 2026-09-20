@@ -49,7 +49,7 @@ export function InvoiceCustomerPicker({
         search: debouncedSearch || undefined,
         invoiceLifecycle: lifecycle || undefined,
         page: 1,
-        pageSize: 100,
+        pageSize: 50,
       });
       const addedIds = new Set(result.items.map((item) => item.id));
       const extras = addedCustomers.filter((customer) => {

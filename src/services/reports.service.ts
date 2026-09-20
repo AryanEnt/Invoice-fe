@@ -45,7 +45,16 @@ export async function downloadReportCsv(query: ReportQuery): Promise<void> {
     headers,
   });
   if (!response.ok) {
-    throw new ApiError(response.status, "CSV_ERROR", "Unable to export report.");
+    const retryAfter = response.headers.get("Retry-After");
+    throw new ApiError(
+      response.status,
+      response.status === 429 ? "TOO_MANY_REQUESTS" : "CSV_ERROR",
+      response.status === 429
+        ? "Too many report exports. Please try again later."
+        : "Unable to export report.",
+      undefined,
+      retryAfter ? Number.parseInt(retryAfter, 10) || undefined : undefined,
+    );
   }
   const blob = await response.blob();
   const objectUrl = URL.createObjectURL(blob);

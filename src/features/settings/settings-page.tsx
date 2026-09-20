@@ -152,7 +152,7 @@ export function SettingsPage() {
           <div className="mt-5">
             <h3 className="text-sm font-medium text-foreground">Organization Logo</h3>
             <p className="mt-1 text-xs text-muted">
-              Recommended size: 200×72 px (or 400×144 px for sharper email/PDF). PNG, JPG, SVG or WebP ·
+              Recommended size: 200×72 px (or 400×144 px for sharper email/PDF). PNG, JPG or WebP ·
               max 2MB. Wide logos work best.
             </p>
 
@@ -179,7 +179,7 @@ export function SettingsPage() {
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                    accept="image/png,image/jpeg,image/webp"
                     className="hidden"
                     onChange={(event) => void handleUpload(event.target.files?.[0])}
                   />

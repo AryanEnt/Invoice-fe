@@ -1,6 +1,7 @@
 import { apiRequest } from "@/lib/api/client";
 import { getApiBaseUrl } from "@/lib/env";
 import { ApiError } from "@/lib/api/types";
+import { clampPageSize, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from "@/lib/pagination";
 import { invoiceListResultSchema, invoiceSchema } from "@/schemas/invoice";
 import type { Invoice, InvoiceFormValues, InvoiceListResult, InvoiceStatus, InvoiceSummary, PublicInvoice } from "@/types/invoice";
 
@@ -53,7 +54,7 @@ export async function listInvoices(query: {
   if (query.sort) params.set("sort", query.sort);
   if (query.sortDir) params.set("sortDir", query.sortDir);
   params.set("page", String(query.page ?? 1));
-  params.set("pageSize", String(query.pageSize ?? 10));
+  params.set("pageSize", String(clampPageSize(query.pageSize, MAX_PAGE_SIZE, DEFAULT_PAGE_SIZE)));
   return invoiceListResultSchema.parse(
     await apiRequest<InvoiceListResult>(`/api/invoices?${params}`),
   );

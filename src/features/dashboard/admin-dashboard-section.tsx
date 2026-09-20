@@ -60,12 +60,12 @@ export function AdminDashboardSection({
     {
       label: "Collected",
       value: Number(metrics.paidAmount),
-      color: CHART_COLORS.paid,
+      color: CHART_COLORS.collected,
     },
     {
       label: "Outstanding",
       value: Number(metrics.outstandingBalance),
-      color: CHART_COLORS.overdue,
+      color: CHART_COLORS.outstanding,
     },
   ].filter((point) => point.value > 0);
 

@@ -1,4 +1,5 @@
 import { apiRequest } from "@/lib/api/client";
+import { clampPageSize, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from "@/lib/pagination";
 import { customerListResultSchema, customerSchema } from "@/schemas/catalog";
 import type {
   AddressFormValues,
@@ -55,10 +56,28 @@ export async function listCustomers(query: {
   if (query.organizationId) params.set("organizationId", query.organizationId);
   if (query.invoiceLifecycle) params.set("invoiceLifecycle", query.invoiceLifecycle);
   params.set("page", String(query.page ?? 1));
-  params.set("pageSize", String(query.pageSize ?? 10));
+  params.set("pageSize", String(clampPageSize(query.pageSize, MAX_PAGE_SIZE, DEFAULT_PAGE_SIZE)));
   return customerListResultSchema.parse(
     await apiRequest<CustomerListResult>(`/api/customers?${params}`),
   );
+}
+
+/** Loads all matching customers via bounded pages (never exceeds MAX_PAGE_SIZE per request). */
+export async function listAllCustomers(
+  query: Omit<Parameters<typeof listCustomers>[0], "page" | "pageSize">,
+): Promise<Customer[]> {
+  const pageSize = MAX_PAGE_SIZE;
+  const first = await listCustomers({ ...query, page: 1, pageSize });
+  const totalPages = Math.max(1, Math.ceil(first.total / pageSize));
+  if (totalPages === 1) {
+    return first.items;
+  }
+  const rest = await Promise.all(
+    Array.from({ length: totalPages - 1 }, (_, index) =>
+      listCustomers({ ...query, page: index + 2, pageSize }),
+    ),
+  );
+  return [...first.items, ...rest.flatMap((page) => page.items)];
 }
 
 export async function getCustomer(id: string): Promise<Customer> {

@@ -61,7 +61,8 @@ export function DistributionChart({
           />
           <Legend
             verticalAlign="bottom"
-            formatter={(value) => <span className="text-xs text-muted">{value}</span>}
+            iconType="circle"
+            formatter={(value) => <span className="text-xs text-foreground/80">{value}</span>}
           />
         </PieChart>
       </ResponsiveContainer>

@@ -10,7 +10,7 @@ import { ApiError } from "@/lib/api/types";
 import { hasPermission } from "@/lib/permissions";
 import { useAuth } from "@/providers/auth-provider";
 import { useToast } from "@/providers/toast-provider";
-import { listCustomers } from "@/services/customers.service";
+import { listAllCustomers } from "@/services/customers.service";
 import { createInvoice, getInvoice, updateInvoice } from "@/services/invoices.service";
 import { listMembers } from "@/services/members.service";
 import { listProducts } from "@/services/products.service";
@@ -56,7 +56,7 @@ export function InvoiceEditorPage({ invoiceId }: InvoiceEditorPageProps) {
         return;
       }
       const [customerResult, productResult, memberResult, invoice] = await Promise.all([
-        listCustomers({ status: "ACTIVE", pageSize: 100 }),
+        listAllCustomers({ status: "ACTIVE" }),
         listProducts({ status: "ACTIVE", pageSize: 50 }),
         canListOrgMembers
           ? listMembers({ status: "ACTIVE", pageSize: 50 })
@@ -67,7 +67,7 @@ export function InvoiceEditorPage({ invoiceId }: InvoiceEditorPageProps) {
         setError("Only draft invoices can be edited.");
         return;
       }
-      setCustomers(customerResult.items);
+      setCustomers(customerResult);
       setProducts(productResult.items);
       setMembers(
         canListOrgMembers

@@ -4,7 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Field, TextInput } from "@/components/ui/field";
-import { ApiError } from "@/lib/api/types";
+import { formatApiErrorMessage } from "@/lib/api/types";
 import { useAuth } from "@/providers/auth-provider";
 import { loginSchema } from "@/schemas/auth";
 
@@ -38,7 +38,12 @@ export function LoginForm() {
       await login(parsed.data.email, parsed.data.password);
       router.replace(searchParams.get("next") || "/");
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "We couldn't sign you in. Check your email and password.");
+      setError(
+        formatApiErrorMessage(
+          err,
+          "We couldn't sign you in. Check your email and password.",
+        ),
+      );
     } finally {
       setBusy(false);
     }

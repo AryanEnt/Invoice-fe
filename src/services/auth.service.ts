@@ -1,6 +1,7 @@
 import { apiRequest } from "@/lib/api/client";
 import { publicUserSchema } from "@/schemas/auth";
 import type { PublicUser } from "@/types/auth";
+import { isAllowedLogoFile } from "@/services/settings.service";
 
 export async function login(email: string, password: string): Promise<PublicUser> {
   const data = await apiRequest<{ user: PublicUser }>("/api/auth/login", {
@@ -45,6 +46,9 @@ export async function changePassword(input: {
 }
 
 export async function uploadAvatar(file: File): Promise<PublicUser> {
+  if (!isAllowedLogoFile(file)) {
+    throw new Error("Use a PNG, JPG, or WebP image up to 2MB.");
+  }
   const contentType = file.type === "image/jpg" ? "image/jpeg" : file.type;
   const upload = await apiRequest<{ uploadUrl: string; objectKey: string }>(
     "/api/auth/avatar/upload-url",

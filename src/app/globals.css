@@ -29,13 +29,28 @@
   --radius-sm: 8px;
   --radius-md: 16px;
   --radius-lg: 20px;
-  --chart-grid: #ececed;
-  --chart-axis: #6b6d70;
+  --chart-grid: #e8eaed;
+  --chart-axis: #6b7280;
   --chart-primary: #1f7a4d;
-  --chart-secondary: #141517;
-  --chart-muted: #9a9b9d;
+  --chart-secondary: #2563eb;
+  --chart-tertiary: #c9850d;
+  --chart-quaternary: #0e7490;
+  --chart-success: #1f7a4d;
+  --chart-warning: #c9850d;
+  --chart-danger: #d41920;
+  --chart-info: #2563eb;
+  --chart-neutral: #64748b;
+  --chart-draft: #94a3b8;
+  --chart-sent: #2563eb;
+  --chart-viewed: #0e7490;
+  --chart-partial: #c9850d;
+  --chart-paid: #1f7a4d;
+  --chart-overdue: #d41920;
+  --chart-cancelled: #94a3b8;
+  --chart-muted: #94a3b8;
   --chart-tooltip-bg: #ffffff;
   --chart-tooltip-border: #e6e7e8;
+  --chart-tooltip-shadow: 0 8px 24px rgb(20 21 23 / 0.08);
 }
 
 .dark {
@@ -64,12 +79,27 @@
   --sidebar-hover: rgb(255 255 255 / 0.06);
   --sidebar-border: rgb(255 255 255 / 0.08);
   --chart-grid: rgb(255 255 255 / 0.08);
-  --chart-axis: #9a9b9d;
+  --chart-axis: #9ca3af;
   --chart-primary: #3d9b68;
-  --chart-secondary: #f5f5f6;
-  --chart-muted: #6b6d70;
+  --chart-secondary: #60a5fa;
+  --chart-tertiary: #d4b06a;
+  --chart-quaternary: #22d3ee;
+  --chart-success: #6fbf93;
+  --chart-warning: #d4b06a;
+  --chart-danger: #e12a31;
+  --chart-info: #60a5fa;
+  --chart-neutral: #9ca3af;
+  --chart-draft: #9ca3af;
+  --chart-sent: #60a5fa;
+  --chart-viewed: #22d3ee;
+  --chart-partial: #d4b06a;
+  --chart-paid: #6fbf93;
+  --chart-overdue: #e12a31;
+  --chart-cancelled: #6b7280;
+  --chart-muted: #9ca3af;
   --chart-tooltip-bg: #1c1d1f;
   --chart-tooltip-border: rgb(255 255 255 / 0.1);
+  --chart-tooltip-shadow: 0 8px 24px rgb(0 0 0 / 0.35);
 }
 
 @theme inline {

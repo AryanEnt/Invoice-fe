@@ -1,4 +1,5 @@
 import { apiRequest } from "@/lib/api/client";
+import { clampPageSize, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from "@/lib/pagination";
 import { productListResultSchema, productSchema } from "@/schemas/catalog";
 import type {
   CatalogKind,
@@ -37,7 +38,7 @@ export async function listProducts(query: {
   if (query.kind) params.set("kind", query.kind);
   if (query.organizationId) params.set("organizationId", query.organizationId);
   params.set("page", String(query.page ?? 1));
-  params.set("pageSize", String(query.pageSize ?? 10));
+  params.set("pageSize", String(clampPageSize(query.pageSize, MAX_PAGE_SIZE, DEFAULT_PAGE_SIZE)));
   return productListResultSchema.parse(
     await apiRequest<ProductListResult>(`/api/products?${params}`),
   );

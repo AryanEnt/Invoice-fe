@@ -33,9 +33,9 @@ export function ChartCard({
   const mounted = useIsClient();
 
   return (
-    <section className="min-w-0 overflow-hidden rounded-2xl border border-border bg-surface">
+    <section className="min-w-0 overflow-hidden rounded-2xl border border-border bg-surface shadow-[0_1px_2px_rgb(20_21_23/0.04)]">
       <header className="border-b border-border px-5 py-4">
-        <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+        <h3 className="text-sm font-semibold tracking-tight text-foreground">{title}</h3>
         {subtitle ? <p className="mt-1 text-xs text-muted">{subtitle}</p> : null}
       </header>
       <div className="min-w-0 p-5" style={{ minHeight: CHART_HEIGHT }}>
