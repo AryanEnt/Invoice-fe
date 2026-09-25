@@ -2,7 +2,6 @@
 	"$schema": "node_modules/wrangler/config-schema.json",
 	"main": ".open-next/worker.js",
 	"name": "invoice-fe",
-	"account_id": "98980482fe2d00d6f0a947dcbfd04239",
 	"compatibility_date": "2026-09-25",
 	"compatibility_flags": [
 		"nodejs_compat",
