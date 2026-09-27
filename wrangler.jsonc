@@ -23,8 +23,5 @@
 		// Enable image optimization
 		// see https://opennext.js.org/cloudflare/howtos/image
 		"binding": "IMAGES"
-	},
-	"vars": {
-		"NEXT_PUBLIC_API_URL": "https://invoice-backend-production-1450.up.railway.app/"
 	}
 }
