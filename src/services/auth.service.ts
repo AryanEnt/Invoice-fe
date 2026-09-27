@@ -3,10 +3,14 @@ import { publicUserSchema } from "@/schemas/auth";
 import type { PublicUser } from "@/types/auth";
 import { isAllowedLogoFile } from "@/services/settings.service";
 
-export async function login(email: string, password: string): Promise<PublicUser> {
+export async function login(
+  email: string,
+  password: string,
+  turnstileToken?: string,
+): Promise<PublicUser> {
   const data = await apiRequest<{ user: PublicUser }>("/api/auth/login", {
     method: "POST",
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email, password, turnstileToken }),
   });
 
   return publicUserSchema.parse(data.user);

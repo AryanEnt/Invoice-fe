@@ -7,6 +7,7 @@ import { Field, TextInput } from "@/components/ui/field";
 import { formatApiErrorMessage } from "@/lib/api/types";
 import { useAuth } from "@/providers/auth-provider";
 import { loginSchema } from "@/schemas/auth";
+import { useTurnstile } from "@/hooks/use-turnstile";
 
 export function LoginForm() {
   const { login, user } = useAuth();
@@ -17,6 +18,7 @@ export function LoginForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const { getToken, loaded: turnstileLoaded, error: turnstileError, containerRef } = useTurnstile();
 
   useEffect(() => {
     if (user) {
@@ -35,7 +37,8 @@ export function LoginForm() {
     setBusy(true);
     setError(null);
     try {
-      await login(parsed.data.email, parsed.data.password);
+      const turnstileToken = await getToken();
+      await login(parsed.data.email, parsed.data.password, turnstileToken || undefined);
       router.replace(searchParams.get("next") || "/");
     } catch (err) {
       setError(
@@ -89,12 +92,13 @@ export function LoginForm() {
           </button>
         </div>
       </Field>
-      {error ? (
+      <div ref={containerRef} className="my-2" />
+      {(turnstileError || error) ? (
         <p className="text-sm text-primary" role="alert">
-          {error}
+          {turnstileError || error}
         </p>
       ) : null}
-      <Button type="submit" className="w-full" disabled={busy}>
+      <Button type="submit" className="w-full" disabled={busy || !turnstileLoaded}>
         {busy ? "Signing in…" : "Sign in"}
       </Button>
     </form>

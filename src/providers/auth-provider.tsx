@@ -17,7 +17,7 @@ import type { PublicUser } from "@/types/auth";
 interface AuthContextValue {
   user: PublicUser | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string, turnstileToken?: string) => Promise<void>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
 }
@@ -73,8 +73,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const login = useCallback(async (email: string, password: string) => {
-    const current = await loginRequest(email, password);
+  const login = useCallback(async (email: string, password: string, turnstileToken?: string) => {
+    const current = await loginRequest(email, password, turnstileToken);
     setUser(current);
   }, []);
 
