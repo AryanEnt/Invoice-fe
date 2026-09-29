@@ -81,7 +81,7 @@ function isLocalDevWithoutTurnstile(): boolean {
   return isLocalhost && hasNoKey;
 }
 
-export function useTurnstile() {
+export function useTurnstile({ theme = "auto" }: { theme?: TurnstileRenderOptions["theme"] } = {}) {
   const [widgetId, setWidgetId] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -137,7 +137,7 @@ export function useTurnstile() {
 
     const newWidgetId = window.turnstile!.render(container, {
       sitekey: siteKey,
-      theme: "auto",
+      theme,
       size: "normal",
       appearance: "always",
       callback: (token: string) => {
@@ -157,7 +157,7 @@ export function useTurnstile() {
     });
 
     setWidgetId(newWidgetId);
-  }, [loaded, siteKey, widgetId, useMockMode]);
+  }, [loaded, siteKey, widgetId, useMockMode, theme]);
 
   const removeWidget = useCallback(() => {
     if (useMockMode) {

@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
+import { ChangePasswordFields, validateNewPassword } from "@/components/change-password-fields";
 import { Field, TextInput } from "@/components/ui/field";
 import { createAdminFormSchema } from "@/schemas/admin";
 import { usePersistedFormState } from "@/hooks/use-persisted-form-state";
@@ -15,7 +16,8 @@ interface AdministratorFormProps {
   persistKey: string;
   busy: boolean;
   onClose: () => void;
-  onSubmit: (values: AdminFormValues) => Promise<void>;
+  /** `newPassword` is only set in edit mode when the Super Admin entered one. */
+  onSubmit: (values: AdminFormValues, newPassword?: string) => Promise<void>;
 }
 
 const emptyValues: AdminFormValues = {
@@ -24,7 +26,6 @@ const emptyValues: AdminFormValues = {
   email: "",
   phone: "",
   organizationId: "",
-  temporaryPassword: "",
   status: "ACTIVE",
 };
 
@@ -42,6 +43,10 @@ export function AdministratorForm({
     ...initialValues,
   });
   const [errors, setErrors] = useState<Partial<Record<keyof AdminFormValues, string>>>({});
+  // Kept out of the persisted draft so passwords never reach sessionStorage.
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordError, setPasswordError] = useState<string | null>(null);
 
   function update<K extends keyof AdminFormValues>(key: K, value: AdminFormValues[K]) {
     setValues((current) => ({ ...current, [key]: value }));
@@ -75,8 +80,14 @@ export function AdministratorForm({
       setErrors({ email: "All fields are required." });
       return;
     }
+    const nextPasswordError = validateNewPassword(newPassword, confirmPassword);
+    if (nextPasswordError) {
+      setPasswordError(nextPasswordError);
+      return;
+    }
     setErrors({});
-    await onSubmit(values);
+    setPasswordError(null);
+    await onSubmit(values, newPassword || undefined);
     clearDraft();
   }
 
@@ -131,9 +142,20 @@ export function AdministratorForm({
         </Field>
         {mode === "create" ? (
           <p className="text-xs text-muted">
-            A temporary password is generated automatically and appears in the Password column after you save.
+            A secure temporary password is generated automatically and shown only once after you
+            save.
           </p>
-        ) : null}
+        ) : (
+          <ChangePasswordFields
+            idPrefix="admin"
+            subject="administrator"
+            newPassword={newPassword}
+            confirmPassword={confirmPassword}
+            error={passwordError}
+            onNewPasswordChange={setNewPassword}
+            onConfirmPasswordChange={setConfirmPassword}
+          />
+        )}
       </form>
     </Dialog>
   );
@@ -146,7 +168,6 @@ export function valuesFromAdmin(admin: AdminUser): AdminFormValues {
     email: admin.email,
     phone: "",
     organizationId: admin.organizationId ?? "",
-    temporaryPassword: "",
     status: admin.status,
   };
 }

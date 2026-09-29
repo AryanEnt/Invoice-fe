@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { ActionGroup, EditAction, StatusAction } from "@/components/ui/action-buttons";
 import { Button } from "@/components/ui/button";
+import { CredentialsDialog, type OneTimeCredentials } from "@/components/credentials-dialog";
+import { KnownPasswordCell } from "@/components/known-password-cell";
 import { DataTable, Table, Td, Th, THead } from "@/components/ui/data-table";
 import { ConfirmDialog } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -14,24 +16,23 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Pagination } from "@/components/ui/pagination";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { MemberForm, valuesFromMember } from "@/features/members/member-form";
-import { MemberPasswordCell } from "@/features/members/member-password-cell";
 import { ApiError } from "@/lib/api/types";
-import {
-  getCachedMemberPasswords,
-  setCachedMemberPassword,
-} from "@/lib/member-password-cache";
+import { copyText } from "@/lib/copy-text";
+import { purgeLegacyCredentialStorage } from "@/lib/legacy-credential-storage";
+import { MAX_PAGE_SIZE } from "@/lib/pagination";
 import { useAuth } from "@/providers/auth-provider";
 import { useToast } from "@/providers/toast-provider";
 import { useWorkspace } from "@/providers/workspace-provider";
+import { listAdmins } from "@/services/admins.service";
 import {
   createMember,
   listMemberAdministrators,
   listMembers,
   resetMemberPassword,
+  setMemberPassword,
   updateMember,
   updateMemberStatus,
 } from "@/services/members.service";
-import { copyText } from "@/lib/copy-text";
 import type { AdministratorSummary } from "@/types/member";
 import type { AccountStatus } from "@/types/auth";
 import type { MemberFormValues, MemberListResult, MemberUser } from "@/types/member";
@@ -42,11 +43,10 @@ export function MembersPage({ embedded = false }: { embedded?: boolean }) {
   const { notify } = useToast();
   const { organizationId, tenantListsReady, scopeLabel } = useWorkspace();
   const canManage = user?.role === "ADMIN" || user?.role === "SUPER_ADMIN";
-  const canCreate = user?.role === "ADMIN";
+  const canCreate = canManage;
   const isSuperAdmin = user?.role === "SUPER_ADMIN";
 
   const [result, setResult] = useState<MemberListResult | null>(null);
-  const [passwords, setPasswords] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -60,11 +60,35 @@ export function MembersPage({ embedded = false }: { embedded?: boolean }) {
   const [formBusy, setFormBusy] = useState(false);
   const [statusTarget, setStatusTarget] = useState<MemberUser | null>(null);
   const [statusBusyId, setStatusBusyId] = useState<string | null>(null);
-  const [copyBusyId, setCopyBusyId] = useState<string | null>(null);
+  const [credentials, setCredentials] = useState<OneTimeCredentials | null>(null);
+  // Passwords set during this visit only; never persisted and gone on refresh.
+  const [knownPasswords, setKnownPasswords] = useState<Record<string, string>>({});
+  const [assignableAdmins, setAssignableAdmins] = useState<AdministratorSummary[]>([]);
 
   useEffect(() => {
-    setPasswords(getCachedMemberPasswords());
+    purgeLegacyCredentialStorage();
   }, []);
+
+  useEffect(() => {
+    if (!isSuperAdmin || formMode !== "create") {
+      return;
+    }
+    let cancelled = false;
+    void listAdmins({ status: "ACTIVE", page: 1, pageSize: MAX_PAGE_SIZE })
+      .then((admins) => {
+        if (!cancelled) {
+          setAssignableAdmins(admins.items);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setAssignableAdmins([]);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [formMode, isSuperAdmin]);
 
   const load = useCallback(async () => {
     if (!isSuperAdmin && !tenantListsReady) {
@@ -85,7 +109,6 @@ export function MembersPage({ embedded = false }: { embedded?: boolean }) {
         pageSize: 10,
       });
       setResult(members);
-      setPasswords((current) => ({ ...current, ...getCachedMemberPasswords() }));
       if (isSuperAdmin) {
         const options = await listMemberAdministrators();
         setAdministrators(options.items);
@@ -149,52 +172,53 @@ export function MembersPage({ embedded = false }: { embedded?: boolean }) {
   }, [canManage, load]);
 
   function rememberPassword(memberId: string, password: string) {
-    setCachedMemberPassword(memberId, password);
-    setPasswords((current) => ({ ...current, [memberId]: password }));
+    setKnownPasswords((current) => ({ ...current, [memberId]: password }));
   }
 
-  async function ensurePassword(member: MemberUser): Promise<string> {
-    const existing = passwords[member.id] ?? getCachedMemberPasswords()[member.id] ?? null;
-    if (existing) {
-      return existing;
-    }
-    const result = await resetMemberPassword(member.id);
-    rememberPassword(member.id, result.temporaryPassword);
-    return result.temporaryPassword;
-  }
-
-  async function copyPasswordToClipboard(text: string) {
-    await copyText(text);
-    notify("Password copied");
-  }
-
-  async function handleCopyPassword(member: MemberUser) {
-    setCopyBusyId(member.id);
+  async function handleCopyPassword(password: string): Promise<boolean> {
     try {
-      const password = await ensurePassword(member);
-      await copyPasswordToClipboard(password);
+      await copyText(password);
+      notify("Password copied");
+      return true;
+    } catch {
+      notify("Unable to copy password.", "error");
+      return false;
+    }
+  }
+
+  async function handleResetAndCopy(member: MemberUser): Promise<boolean> {
+    try {
+      const { temporaryPassword } = await resetMemberPassword(member.id);
+      rememberPassword(member.id, temporaryPassword);
+      try {
+        await copyText(temporaryPassword);
+        notify("Password copied");
+        return true;
+      } catch {
+        setCredentials({ title: "Password reset", email: member.email, temporaryPassword });
+        return false;
+      }
     } catch (err) {
       notify(err instanceof ApiError ? err.message : "Unable to copy password.", "error");
-    } finally {
-      setCopyBusyId(null);
+      return false;
     }
   }
 
   async function handleCreate(values: MemberFormValues) {
     setFormBusy(true);
     try {
-      const created = await createMember(values);
-      const password =
-        created.temporaryPassword ?? (values.temporaryPassword.trim() || null);
-      if (password) {
-        rememberPassword(created.user.id, password);
-      }
+      const created = await createMember({
+        ...values,
+        administratorId: isSuperAdmin ? values.administratorId : "",
+      });
+      rememberPassword(created.user.id, created.temporaryPassword);
       setFormMode(null);
-      notify("Member added.");
+      setCredentials({
+        title: "Member created successfully",
+        email: created.user.email,
+        temporaryPassword: created.temporaryPassword,
+      });
       await load();
-      if (password) {
-        rememberPassword(created.user.id, password);
-      }
     } catch (err) {
       notify(err instanceof ApiError ? err.message : "Unable to create member.", "error");
     } finally {
@@ -202,21 +226,13 @@ export function MembersPage({ embedded = false }: { embedded?: boolean }) {
     }
   }
 
-  async function handleEdit(values: MemberFormValues) {
+  async function handleEdit(values: MemberFormValues, newPassword?: string) {
     if (!editing) {
       return;
     }
     setFormBusy(true);
     try {
       const updated = await updateMember(editing.id, values);
-      const password =
-        updated.temporaryPassword ?? (values.temporaryPassword.trim() || null);
-      if (password) {
-        rememberPassword(updated.user.id, password);
-      }
-      setFormMode(null);
-      setEditing(null);
-      notify("Member updated.");
       setResult((current) =>
         current
           ? {
@@ -226,6 +242,27 @@ export function MembersPage({ embedded = false }: { embedded?: boolean }) {
               ),
             }
           : current,
+      );
+      if (newPassword) {
+        try {
+          await setMemberPassword(editing.id, newPassword);
+          rememberPassword(editing.id, newPassword);
+        } catch (err) {
+          notify(
+            err instanceof ApiError
+              ? `Details saved, but the password was not changed: ${err.message}`
+              : "Details saved, but the password was not changed.",
+            "error",
+          );
+          return;
+        }
+      }
+      setFormMode(null);
+      setEditing(null);
+      notify(
+        newPassword
+          ? "Member updated. Password changed and they have been signed out."
+          : "Member updated.",
       );
     } catch (err) {
       notify(err instanceof ApiError ? err.message : "Unable to update member.", "error");
@@ -391,9 +428,10 @@ export function MembersPage({ embedded = false }: { embedded?: boolean }) {
                     </Td>
                   ) : null}
                   <Td>
-                    <MemberPasswordCell
-                      copying={copyBusyId === member.id}
-                      onCopy={() => handleCopyPassword(member)}
+                    <KnownPasswordCell
+                      password={knownPasswords[member.id]}
+                      onCopy={handleCopyPassword}
+                      onRequestNew={() => handleResetAndCopy(member)}
                     />
                   </Td>
                   <Td>
@@ -428,6 +466,7 @@ export function MembersPage({ embedded = false }: { embedded?: boolean }) {
           mode="create"
           persistKey="member-form:create"
           initialValues={{ organizationId: organizationId ?? "" }}
+          administrators={isSuperAdmin ? assignableAdmins : undefined}
           busy={formBusy}
           onClose={() => setFormMode(null)}
           onSubmit={handleCreate}
@@ -463,6 +502,10 @@ export function MembersPage({ embedded = false }: { embedded?: boolean }) {
           onCancel={() => setStatusTarget(null)}
           onConfirm={() => void handleStatusChange()}
         />
+      ) : null}
+
+      {credentials ? (
+        <CredentialsDialog credentials={credentials} onClose={() => setCredentials(null)} />
       ) : null}
     </div>
   );

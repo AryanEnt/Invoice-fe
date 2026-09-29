@@ -4,17 +4,22 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Field, PasswordInput, TextInput } from "@/components/ui/field";
 import { PageHeader } from "@/components/ui/page-header";
+import { SelectedFileName } from "@/components/ui/selected-file-name";
 import { ROLE_LABELS } from "@/config/navigation";
 import { usePersistedFormState } from "@/hooks/use-persisted-form-state";
+import { useSelectedImage } from "@/hooks/use-selected-image";
 import { ApiError } from "@/lib/api/types";
+import { purgeLegacyCredentialStorage } from "@/lib/legacy-credential-storage";
 import { useAuth } from "@/providers/auth-provider";
 import { useToast } from "@/providers/toast-provider";
 import { changePassword, removeAvatar, updateProfile, uploadAvatar } from "@/services/auth.service";
+import { isAllowedLogoFile } from "@/services/settings.service";
 
 export function AccountSettingsPage() {
   const { user, refresh } = useAuth();
   const { notify } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const selectedAvatar = useSelectedImage();
   const [firstName, setFirstName, clearFirstNameDraft] = usePersistedFormState(
     "settings:account:first-name",
     "",
@@ -23,21 +28,16 @@ export function AccountSettingsPage() {
     "settings:account:last-name",
     "",
   );
-  const [currentPassword, setCurrentPassword, clearCurrentPasswordDraft] = usePersistedFormState(
-    "settings:account:current-password",
-    "",
-  );
-  const [newPassword, setNewPassword, clearNewPasswordDraft] = usePersistedFormState(
-    "settings:account:new-password",
-    "",
-  );
-  const [confirmPassword, setConfirmPassword, clearConfirmPasswordDraft] = usePersistedFormState(
-    "settings:account:confirm-password",
-    "",
-  );
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
   const [avatarBusy, setAvatarBusy] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
+
+  useEffect(() => {
+    purgeLegacyCredentialStorage();
+  }, []);
 
   useEffect(() => {
     if (!user) {
@@ -46,12 +46,6 @@ export function AccountSettingsPage() {
     setFirstName((current) => current || user.firstName);
     setLastName((current) => current || user.lastName);
   }, [setFirstName, setLastName, user]);
-
-  function clearPasswordDrafts() {
-    clearCurrentPasswordDraft();
-    clearNewPasswordDraft();
-    clearConfirmPasswordDraft();
-  }
 
   if (!user) {
     return <p className="text-sm text-muted">Loading account…</p>;
@@ -73,7 +67,22 @@ export function AccountSettingsPage() {
     }
   }
 
-  async function handleAvatar(file: File | undefined) {
+  function handlePickAvatar(file: File | undefined) {
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+    if (!file) {
+      return;
+    }
+    if (!isAllowedLogoFile(file)) {
+      notify("Use a PNG, JPG, or WebP image up to 2MB.", "error");
+      return;
+    }
+    selectedAvatar.select(file);
+  }
+
+  async function handleSaveAvatar() {
+    const file = selectedAvatar.file;
     if (!file) {
       return;
     }
@@ -81,14 +90,12 @@ export function AccountSettingsPage() {
     try {
       await uploadAvatar(file);
       await refresh();
-      notify("Profile picture updated");
+      selectedAvatar.reset();
+      notify("Profile picture saved");
     } catch (err) {
       notify(err instanceof Error ? err.message : "Unable to upload profile picture.", "error");
     } finally {
       setAvatarBusy(false);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
     }
   }
 
@@ -97,6 +104,7 @@ export function AccountSettingsPage() {
     try {
       await removeAvatar();
       await refresh();
+      selectedAvatar.reset();
       notify("Profile picture removed");
     } catch (err) {
       notify(err instanceof ApiError ? err.message : "Unable to remove profile picture.", "error");
@@ -117,7 +125,6 @@ export function AccountSettingsPage() {
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
-      clearPasswordDrafts();
       notify("Password changed");
     } catch (err) {
       notify(err instanceof ApiError ? err.message : "Unable to change password.", "error");
@@ -134,9 +141,13 @@ export function AccountSettingsPage() {
         <h2 className="text-sm font-semibold text-foreground">Profile picture</h2>
         <div className="mt-4 flex items-center gap-4">
           <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-full border border-border bg-muted-soft">
-            {user.avatarUrl ? (
+            {selectedAvatar.previewUrl || user.avatarUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={user.avatarUrl} alt="" className="h-full w-full object-cover" />
+              <img
+                src={selectedAvatar.previewUrl ?? user.avatarUrl ?? undefined}
+                alt=""
+                className="h-full w-full object-cover"
+              />
             ) : (
               <span className="text-lg font-semibold text-muted">
                 {user.firstName.slice(0, 1)}
@@ -144,22 +155,38 @@ export function AccountSettingsPage() {
               </span>
             )}
           </div>
-          <div className="flex flex-wrap gap-2">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              className="hidden"
-              onChange={(event) => void handleAvatar(event.target.files?.[0])}
-            />
-            <Button type="button" disabled={avatarBusy} onClick={() => fileInputRef.current?.click()}>
-              Change picture
-            </Button>
-            {user.avatarUrl ? (
-              <Button type="button" variant="secondary" disabled={avatarBusy} onClick={() => void handleRemoveAvatar()}>
-                Remove
-              </Button>
-            ) : null}
+          <div className="min-w-0">
+            <div className="flex flex-wrap gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                className="hidden"
+                onChange={(event) => handlePickAvatar(event.target.files?.[0])}
+              />
+              {selectedAvatar.file ? (
+                <>
+                  <Button type="button" disabled={avatarBusy} onClick={() => void handleSaveAvatar()}>
+                    {avatarBusy ? "Saving…" : "Save picture"}
+                  </Button>
+                  <Button type="button" variant="secondary" disabled={avatarBusy} onClick={selectedAvatar.reset}>
+                    Cancel
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button type="button" disabled={avatarBusy} onClick={() => fileInputRef.current?.click()}>
+                    Change picture
+                  </Button>
+                  {user.avatarUrl ? (
+                    <Button type="button" variant="secondary" disabled={avatarBusy} onClick={() => void handleRemoveAvatar()}>
+                      Remove
+                    </Button>
+                  ) : null}
+                </>
+              )}
+            </div>
+            <SelectedFileName fileName={selectedAvatar.fileName} busy={avatarBusy} />
           </div>
         </div>
       </section>

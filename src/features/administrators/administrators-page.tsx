@@ -2,32 +2,34 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ActionGroup, EditAction } from "@/components/ui/action-buttons";
+import { ActionGroup, EditAction, StatusAction } from "@/components/ui/action-buttons";
 import { Button } from "@/components/ui/button";
+import { CredentialsDialog, type OneTimeCredentials } from "@/components/credentials-dialog";
+import { KnownPasswordCell } from "@/components/known-password-cell";
 import { DataTable, Table, Td, Th, THead } from "@/components/ui/data-table";
+import { ConfirmDialog } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { Field, TextInput } from "@/components/ui/field";
 import { PageHeader } from "@/components/ui/page-header";
 import { Pagination } from "@/components/ui/pagination";
+import { StatusBadge } from "@/components/ui/status-badge";
 import {
   AdministratorForm,
   valuesFromAdmin,
 } from "@/features/administrators/administrator-form";
-import { MemberPasswordCell } from "@/features/members/member-password-cell";
 import { ApiError } from "@/lib/api/types";
-import {
-  getCachedAdminPasswords,
-  setCachedAdminPassword,
-} from "@/lib/admin-password-cache";
 import { copyText } from "@/lib/copy-text";
+import { purgeLegacyCredentialStorage } from "@/lib/legacy-credential-storage";
 import { useAuth } from "@/providers/auth-provider";
 import { useToast } from "@/providers/toast-provider";
 import {
   createAdmin,
   listAdmins,
   resetAdminPassword,
+  setAdminPassword,
   updateAdmin,
+  updateAdminStatus,
 } from "@/services/admins.service";
 import type { AdminFormValues, AdminListResult, AdminUser } from "@/types/admin";
 
@@ -37,7 +39,6 @@ export function AdministratorsPage({ embedded = false }: { embedded?: boolean })
   const { notify } = useToast();
 
   const [result, setResult] = useState<AdminListResult | null>(null);
-  const [passwords, setPasswords] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -45,10 +46,13 @@ export function AdministratorsPage({ embedded = false }: { embedded?: boolean })
   const [formMode, setFormMode] = useState<"create" | "edit" | null>(null);
   const [editing, setEditing] = useState<AdminUser | null>(null);
   const [formBusy, setFormBusy] = useState(false);
-  const [copyBusyId, setCopyBusyId] = useState<string | null>(null);
-
+  const [statusTarget, setStatusTarget] = useState<AdminUser | null>(null);
+  const [statusBusyId, setStatusBusyId] = useState<string | null>(null);
+  const [credentials, setCredentials] = useState<OneTimeCredentials | null>(null);
+  // Passwords set during this visit only; never persisted and gone on refresh.
+  const [knownPasswords, setKnownPasswords] = useState<Record<string, string>>({});
   useEffect(() => {
-    setPasswords(getCachedAdminPasswords());
+    purgeLegacyCredentialStorage();
   }, []);
 
   const load = useCallback(async () => {
@@ -61,7 +65,6 @@ export function AdministratorsPage({ embedded = false }: { embedded?: boolean })
         pageSize: 10,
       });
       setResult(admins);
-      setPasswords((current) => ({ ...current, ...getCachedAdminPasswords() }));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Unable to load administrators.");
     } finally {
@@ -93,31 +96,65 @@ export function AdministratorsPage({ embedded = false }: { embedded?: boolean })
     };
   }, [load, user?.role]);
 
-  function rememberPassword(adminId: string, password: string) {
-    setCachedAdminPassword(adminId, password);
-    setPasswords((current) => ({ ...current, [adminId]: password }));
+  function replaceAdmin(updated: AdminUser) {
+    setResult((current) =>
+      current
+        ? {
+            ...current,
+            items: current.items.map((item) => (item.id === updated.id ? updated : item)),
+          }
+        : current,
+    );
   }
 
-  async function ensurePassword(admin: AdminUser): Promise<string> {
-    const existing = passwords[admin.id] ?? getCachedAdminPasswords()[admin.id] ?? null;
-    if (existing) {
-      return existing;
+  async function handleStatusChange() {
+    if (!statusTarget) {
+      return;
     }
-    const result = await resetAdminPassword(admin.id);
-    rememberPassword(admin.id, result.temporaryPassword);
-    return result.temporaryPassword;
+    setStatusBusyId(statusTarget.id);
+    const nextStatus = statusTarget.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
+    try {
+      const updated = await updateAdminStatus(statusTarget.id, nextStatus);
+      setStatusTarget(null);
+      notify(nextStatus === "ACTIVE" ? "Administrator activated" : "Administrator deactivated");
+      replaceAdmin(updated);
+    } catch (err) {
+      notify(err instanceof ApiError ? err.message : "Unable to update status.", "error");
+    } finally {
+      setStatusBusyId(null);
+    }
   }
 
-  async function handleCopyPassword(admin: AdminUser) {
-    setCopyBusyId(admin.id);
+  function rememberPassword(adminId: string, password: string) {
+    setKnownPasswords((current) => ({ ...current, [adminId]: password }));
+  }
+
+  async function handleCopyPassword(password: string): Promise<boolean> {
     try {
-      const password = await ensurePassword(admin);
       await copyText(password);
       notify("Password copied");
+      return true;
+    } catch {
+      notify("Unable to copy password.", "error");
+      return false;
+    }
+  }
+
+  async function handleResetAndCopy(admin: AdminUser): Promise<boolean> {
+    try {
+      const { temporaryPassword } = await resetAdminPassword(admin.id);
+      rememberPassword(admin.id, temporaryPassword);
+      try {
+        await copyText(temporaryPassword);
+        notify("Password copied");
+        return true;
+      } catch {
+        setCredentials({ title: "Password reset", email: admin.email, temporaryPassword });
+        return false;
+      }
     } catch (err) {
       notify(err instanceof ApiError ? err.message : "Unable to copy password.", "error");
-    } finally {
-      setCopyBusyId(null);
+      return false;
     }
   }
 
@@ -125,17 +162,14 @@ export function AdministratorsPage({ embedded = false }: { embedded?: boolean })
     setFormBusy(true);
     try {
       const created = await createAdmin(values);
-      const password =
-        created.temporaryPassword ?? (values.temporaryPassword.trim() || null);
-      if (password) {
-        rememberPassword(created.user.id, password);
-      }
+      rememberPassword(created.user.id, created.temporaryPassword);
       setFormMode(null);
-      notify("Administrator added.");
+      setCredentials({
+        title: "Administrator created successfully",
+        email: created.user.email,
+        temporaryPassword: created.temporaryPassword,
+      });
       await load();
-      if (password) {
-        rememberPassword(created.user.id, password);
-      }
     } catch (err) {
       notify(err instanceof ApiError ? err.message : "Unable to create administrator.", "error");
     } finally {
@@ -143,23 +177,34 @@ export function AdministratorsPage({ embedded = false }: { embedded?: boolean })
     }
   }
 
-  async function handleEdit(values: AdminFormValues) {
+  async function handleEdit(values: AdminFormValues, newPassword?: string) {
     if (!editing) {
       return;
     }
     setFormBusy(true);
     try {
       const updated = await updateAdmin(editing.id, values);
+      replaceAdmin(updated);
+      if (newPassword) {
+        try {
+          await setAdminPassword(editing.id, newPassword);
+          rememberPassword(editing.id, newPassword);
+        } catch (err) {
+          notify(
+            err instanceof ApiError
+              ? `Details saved, but the password was not changed: ${err.message}`
+              : "Details saved, but the password was not changed.",
+            "error",
+          );
+          return;
+        }
+      }
       setFormMode(null);
       setEditing(null);
-      notify("Administrator updated.");
-      setResult((current) =>
-        current
-          ? {
-              ...current,
-              items: current.items.map((item) => (item.id === updated.id ? updated : item)),
-            }
-          : current,
+      notify(
+        newPassword
+          ? "Administrator updated. Password changed and they have been signed out."
+          : "Administrator updated.",
       );
     } catch (err) {
       notify(err instanceof ApiError ? err.message : "Unable to update administrator.", "error");
@@ -229,6 +274,7 @@ export function AdministratorsPage({ embedded = false }: { embedded?: boolean })
                 <Th>Name</Th>
                 <Th>Email</Th>
                 <Th>Password</Th>
+                <Th>Status</Th>
                 <Th className="text-right">Actions</Th>
               </tr>
             </THead>
@@ -242,10 +288,14 @@ export function AdministratorsPage({ embedded = false }: { embedded?: boolean })
                   </Td>
                   <Td muted>{admin.email}</Td>
                   <Td>
-                    <MemberPasswordCell
-                      copying={copyBusyId === admin.id}
-                      onCopy={() => handleCopyPassword(admin)}
+                    <KnownPasswordCell
+                      password={knownPasswords[admin.id]}
+                      onCopy={handleCopyPassword}
+                      onRequestNew={() => handleResetAndCopy(admin)}
                     />
+                  </Td>
+                  <Td>
+                    <StatusBadge status={admin.status} />
                   </Td>
                   <Td className="text-right">
                     <ActionGroup>
@@ -254,6 +304,12 @@ export function AdministratorsPage({ embedded = false }: { embedded?: boolean })
                           setEditing(admin);
                           setFormMode("edit");
                         }}
+                      />
+                      <StatusAction
+                        active={admin.status === "ACTIVE"}
+                        loading={statusBusyId === admin.id}
+                        disabled={Boolean(statusBusyId && statusBusyId !== admin.id)}
+                        onClick={() => setStatusTarget(admin)}
                       />
                     </ActionGroup>
                   </Td>
@@ -288,6 +344,28 @@ export function AdministratorsPage({ embedded = false }: { embedded?: boolean })
           }}
           onSubmit={handleEdit}
         />
+      ) : null}
+
+      {statusTarget ? (
+        <ConfirmDialog
+          title={
+            statusTarget.status === "ACTIVE" ? "Deactivate Administrator?" : "Activate Administrator?"
+          }
+          message={
+            statusTarget.status === "ACTIVE"
+              ? `${statusTarget.firstName} ${statusTarget.lastName} will be signed out and will no longer be able to access the system.`
+              : `${statusTarget.firstName} ${statusTarget.lastName} will be able to sign in again.`
+          }
+          confirmLabel={statusTarget.status === "ACTIVE" ? "Deactivate" : "Activate"}
+          danger={statusTarget.status === "ACTIVE"}
+          busy={statusBusyId === statusTarget.id}
+          onCancel={() => setStatusTarget(null)}
+          onConfirm={() => void handleStatusChange()}
+        />
+      ) : null}
+
+      {credentials ? (
+        <CredentialsDialog credentials={credentials} onClose={() => setCredentials(null)} />
       ) : null}
     </div>
   );
