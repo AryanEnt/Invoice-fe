@@ -102,7 +102,48 @@
   --chart-tooltip-shadow: 0 8px 24px rgb(0 0 0 / 0.35);
 }
 
+/* Sign-in page tokens. The hero stays forest green in both schemes. */
+:root {
+  --auth-forest: #06301f;
+  --auth-moss: #0f4a2e;
+  --auth-leaf: #2fbf3a;
+  --auth-leaf-hover: #45cc4f;
+  --auth-leaf-dark: #1f9a2b;
+  --auth-bg: #ffffff;
+  --auth-field: #eef6f0;
+  --auth-ink: #10241a;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --auth-bg: #0b1a12;
+    --auth-field: #12281c;
+    --auth-ink: #eaf5ee;
+  }
+}
+
+@keyframes auth-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @theme inline {
+  --color-forest: var(--auth-forest);
+  --color-moss: var(--auth-moss);
+  --color-leaf: var(--auth-leaf);
+  --color-leaf-hover: var(--auth-leaf-hover);
+  --color-leaf-dark: var(--auth-leaf-dark);
+  --color-auth-bg: var(--auth-bg);
+  --color-field: var(--auth-field);
+  --color-ink: var(--auth-ink);
+  --font-jakarta: var(--font-plus-jakarta);
+  --animate-auth-fade-in: auth-fade-in 0.5s ease-out both;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-surface: var(--surface);

@@ -1,8 +1,19 @@
 import { z } from "zod";
 import { apiRequest } from "@/lib/api/client";
 import { clampPageSize, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from "@/lib/pagination";
-import { administratorSummarySchema, memberListResultSchema, memberUserSchema } from "@/schemas/member";
-import type { AdministratorSummary, MemberFormValues, MemberListResult, MemberUser } from "@/types/member";
+import {
+  administratorSummarySchema,
+  credentialUserSchema,
+  memberListResultSchema,
+  memberUserSchema,
+} from "@/schemas/member";
+import type {
+  AdministratorSummary,
+  CredentialUser,
+  MemberFormValues,
+  MemberListResult,
+  MemberUser,
+} from "@/types/member";
 import type { AccountStatus } from "@/types/auth";
 
 export async function listMemberAdministrators(): Promise<{
@@ -59,58 +70,56 @@ export async function getMember(id: string): Promise<MemberUser> {
   return memberUserSchema.parse(data.user);
 }
 
+/** The temporary password is returned once; callers must keep it in component state only. */
 export async function createMember(values: MemberFormValues): Promise<{
   user: MemberUser;
-  temporaryPassword: string | null;
+  temporaryPassword: string;
 }> {
-  const data = await apiRequest<{ user: MemberUser; temporaryPassword: string | null }>(
-    "/api/members",
-    {
-      method: "POST",
-      body: JSON.stringify({
-        firstName: values.firstName,
-        lastName: values.lastName,
-        email: values.email,
-        organizationId: values.organizationId || undefined,
-        temporaryPassword: values.temporaryPassword || undefined,
-        status: values.status,
-      }),
-    },
-  );
+  const data = await apiRequest<{ user: MemberUser; temporaryPassword: string }>("/api/members", {
+    method: "POST",
+    body: JSON.stringify({
+      firstName: values.firstName,
+      lastName: values.lastName,
+      email: values.email,
+      organizationId: values.administratorId ? undefined : values.organizationId || undefined,
+      administratorId: values.administratorId || undefined,
+      status: values.status,
+    }),
+  });
 
   return {
     user: memberUserSchema.parse(data.user),
-    temporaryPassword: data.temporaryPassword,
+    temporaryPassword: z.string().min(1).parse(data.temporaryPassword),
   };
 }
 
 export async function updateMember(
   id: string,
-  values: Pick<MemberFormValues, "firstName" | "lastName" | "email" | "temporaryPassword">,
-): Promise<{ user: MemberUser; temporaryPassword: string | null }> {
-  const data = await apiRequest<{ user: MemberUser; temporaryPassword: string | null }>(
-    `/api/members/${id}`,
-    {
-      method: "PATCH",
-      body: JSON.stringify({
-        firstName: values.firstName,
-        lastName: values.lastName,
-        email: values.email,
-        temporaryPassword: values.temporaryPassword || undefined,
-      }),
-    },
-  );
-  return {
-    user: memberUserSchema.parse(data.user),
-    temporaryPassword: data.temporaryPassword,
-  };
+  values: Pick<MemberFormValues, "firstName" | "lastName" | "email">,
+): Promise<{ user: MemberUser }> {
+  const data = await apiRequest<{ user: MemberUser }>(`/api/members/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({
+      firstName: values.firstName,
+      lastName: values.lastName,
+      email: values.email,
+    }),
+  });
+  return { user: memberUserSchema.parse(data.user) };
 }
 
-export async function resetMemberPassword(id: string): Promise<{ temporaryPassword: string }> {
-  const data = await apiRequest<{ temporaryPassword: string }>(`/api/members/${id}/password`, {
-    method: "POST",
-  });
-  return { temporaryPassword: data.temporaryPassword };
+/** The temporary password is returned once; callers must keep it in component state only. */
+export async function resetMemberPassword(
+  id: string,
+): Promise<{ user: CredentialUser; temporaryPassword: string }> {
+  const data = await apiRequest<{ user: CredentialUser; temporaryPassword: string }>(
+    `/api/members/${id}/password`,
+    { method: "POST" },
+  );
+  return {
+    user: credentialUserSchema.parse(data.user),
+    temporaryPassword: z.string().min(1).parse(data.temporaryPassword),
+  };
 }
 
 export async function updateMemberStatus(id: string, status: AccountStatus): Promise<MemberUser> {

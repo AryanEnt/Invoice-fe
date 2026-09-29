@@ -26,6 +26,17 @@ export interface MemberFormValues {
   lastName: string;
   email: string;
   organizationId: string;
-  temporaryPassword: string;
+  /** Super Admin only: owning Administrator ("" = unassigned). */
+  administratorId: string;
+  status: AccountStatus;
+}
+
+/** Identity returned alongside a one-time temporary password. */
+export interface CredentialUser {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  role: string;
   status: AccountStatus;
 }

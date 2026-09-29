@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Field, SelectInput, TextInput } from "@/components/ui/field";
 import { PageHeader } from "@/components/ui/page-header";
+import { SelectedFileName } from "@/components/ui/selected-file-name";
+import { useSelectedImage } from "@/hooks/use-selected-image";
 import {
   getFormDraft,
   usePersistedFormState,
@@ -13,6 +15,7 @@ import { useAuth } from "@/providers/auth-provider";
 import { useToast } from "@/providers/toast-provider";
 import {
   getInvoiceSettings,
+  isAllowedLogoFile,
   removeOrganizationLogo,
   saveInvoiceSettings,
   uploadOrganizationLogo,
@@ -31,6 +34,7 @@ export function InvoiceSettingsPage() {
   const { user } = useAuth();
   const { notify } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const selectedLogo = useSelectedImage();
   const canManageLogo = user?.role === "SUPER_ADMIN";
   const [settings, setSettings, clearSettingsDraft] = usePersistedFormState<InvoiceSettings | null>(
     SETTINGS_DRAFT_KEY,
@@ -41,19 +45,41 @@ export function InvoiceSettingsPage() {
   const [logoBusy, setLogoBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const applySettings = useCallback(
+    (data: InvoiceSettings, draft: InvoiceSettings | null) => {
+      // Form drafts must never override server logo fields — that made uploads look
+      // like they failed after a successful R2 write.
+      if (!draft) {
+        setSettings(data);
+        return;
+      }
+      setSettings({
+        ...data,
+        companyName: draft.companyName ?? data.companyName,
+        currency: draft.currency ?? data.currency,
+        language: draft.language ?? data.language,
+        address: draft.address ?? data.address,
+        logoUrl: data.logoUrl,
+        hasLogo: data.hasLogo,
+        organizationId: data.organizationId,
+        organizationName: data.organizationName,
+      });
+    },
+    [setSettings],
+  );
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const data = await getInvoiceSettings();
-      const draft = getFormDraft<InvoiceSettings>(SETTINGS_DRAFT_KEY);
-      setSettings(draft ?? data);
+      applySettings(data, getFormDraft<InvoiceSettings>(SETTINGS_DRAFT_KEY));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Unable to load invoice settings.");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [applySettings]);
 
   useEffect(() => {
     void load();
@@ -84,22 +110,45 @@ export function InvoiceSettingsPage() {
     }
   }
 
-  async function handleLogo(file: File | undefined) {
+  function handlePickLogo(file: File | undefined) {
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+    if (!file) {
+      return;
+    }
+    if (!isAllowedLogoFile(file)) {
+      notify("Use a PNG, JPG, or WebP logo up to 2MB.", "error");
+      return;
+    }
+    selectedLogo.select(file);
+  }
+
+  async function handleSaveLogo() {
+    const file = selectedLogo.file;
     if (!file) {
       return;
     }
     setLogoBusy(true);
     try {
-      await uploadOrganizationLogo(file);
-      await load();
-      notify("Logo updated successfully");
+      const uploaded = await uploadOrganizationLogo(file);
+      const data = await getInvoiceSettings();
+      setSettings((prev) =>
+        prev
+          ? {
+              ...prev,
+              logoUrl: data.logoUrl ?? uploaded.logoUrl,
+              hasLogo: data.hasLogo || uploaded.hasLogo,
+              organizationName: data.organizationName,
+            }
+          : data,
+      );
+      selectedLogo.reset();
+      notify("Logo saved");
     } catch (err) {
       notify(err instanceof Error ? err.message : "Unable to upload logo.", "error");
     } finally {
       setLogoBusy(false);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
     }
   }
 
@@ -107,7 +156,16 @@ export function InvoiceSettingsPage() {
     setLogoBusy(true);
     try {
       await removeOrganizationLogo();
-      await load();
+      setSettings((prev) =>
+        prev
+          ? {
+              ...prev,
+              logoUrl: null,
+              hasLogo: false,
+            }
+          : prev,
+      );
+      selectedLogo.reset();
       notify("Logo removed");
     } catch (err) {
       notify(err instanceof ApiError ? err.message : "Unable to remove logo.", "error");
@@ -141,15 +199,33 @@ export function InvoiceSettingsPage() {
               max 2MB. Wide logos work best.
             </p>
             <div className="mt-4 flex h-40 w-full max-w-md items-center justify-center rounded-xl border border-dashed border-border bg-muted-soft/40 p-4">
-              {settings.logoUrl ? (
+              {selectedLogo.previewUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
+                  src={selectedLogo.previewUrl}
+                  alt="Selected logo"
+                  className="max-h-full max-w-full object-contain"
+                />
+              ) : settings.logoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  key={settings.logoUrl}
                   src={settings.logoUrl}
                   alt={`${settings.organizationName} logo`}
                   className="max-h-full max-w-full object-contain"
+                  onError={() =>
+                    setSettings({
+                      ...settings,
+                      logoUrl: null,
+                    })
+                  }
                 />
               ) : (
-                <p className="text-sm text-muted">No logo uploaded</p>
+                <p className="text-sm text-muted">
+                  {settings.hasLogo
+                    ? "Logo uploaded, but the preview URL could not be loaded. Check R2 public access / CORS."
+                    : "No logo uploaded"}
+                </p>
               )}
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
@@ -158,17 +234,31 @@ export function InvoiceSettingsPage() {
                 type="file"
                 accept="image/png,image/jpeg,image/webp"
                 className="hidden"
-                onChange={(event) => void handleLogo(event.target.files?.[0])}
+                onChange={(event) => handlePickLogo(event.target.files?.[0])}
               />
-              <Button type="button" disabled={logoBusy} onClick={() => fileInputRef.current?.click()}>
-                {settings.hasLogo ? "Upload New Logo" : "Upload Logo"}
-              </Button>
-              {settings.hasLogo ? (
-                <Button type="button" variant="secondary" disabled={logoBusy} onClick={() => void handleRemoveLogo()}>
-                  Remove
-                </Button>
-              ) : null}
+              {selectedLogo.file ? (
+                <>
+                  <Button type="button" disabled={logoBusy} onClick={() => void handleSaveLogo()}>
+                    {logoBusy ? "Saving…" : "Save Logo"}
+                  </Button>
+                  <Button type="button" variant="secondary" disabled={logoBusy} onClick={selectedLogo.reset}>
+                    Cancel
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button type="button" disabled={logoBusy} onClick={() => fileInputRef.current?.click()}>
+                    {settings.hasLogo ? "Choose New Logo" : "Choose Logo"}
+                  </Button>
+                  {settings.hasLogo ? (
+                    <Button type="button" variant="secondary" disabled={logoBusy} onClick={() => void handleRemoveLogo()}>
+                      Remove
+                    </Button>
+                  ) : null}
+                </>
+              )}
             </div>
+            <SelectedFileName fileName={selectedLogo.fileName} busy={logoBusy} />
             <div className="mt-5 max-w-md">
               <Field
                 label="Company name"

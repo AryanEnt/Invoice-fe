@@ -24,7 +24,6 @@ const emptyValues: AdminFormValues = {
   email: "",
   phone: "",
   organizationId: "",
-  temporaryPassword: "",
   status: "ACTIVE",
 };
 
@@ -131,7 +130,8 @@ export function AdministratorForm({
         </Field>
         {mode === "create" ? (
           <p className="text-xs text-muted">
-            A temporary password is generated automatically and appears in the Password column after you save.
+            A secure temporary password is generated automatically and shown only once after you
+            save.
           </p>
         ) : null}
       </form>
@@ -146,7 +146,6 @@ export function valuesFromAdmin(admin: AdminUser): AdminFormValues {
     email: admin.email,
     phone: "",
     organizationId: admin.organizationId ?? "",
-    temporaryPassword: "",
     status: admin.status,
   };
 }

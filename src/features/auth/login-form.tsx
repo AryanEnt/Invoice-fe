@@ -1,134 +1,156 @@
 "use client";
 
+import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState, type FormEvent } from "react";
-import { Button } from "@/components/ui/button";
-import { Field, TextInput } from "@/components/ui/field";
+import { useEffect, useState } from "react";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+import { FloatingInput } from "@/features/auth/floating-input";
+import { InvoiceHubLogo } from "@/features/auth/invoicehub-logo";
+import { PasswordInput } from "@/features/auth/password-input";
+import { useTurnstile } from "@/hooks/use-turnstile";
 import { formatApiErrorMessage } from "@/lib/api/types";
 import { useAuth } from "@/providers/auth-provider";
-import { loginSchema } from "@/schemas/auth";
-import { useTurnstile } from "@/hooks/use-turnstile";
+
+const loginFormSchema = z.object({
+  email: z
+    .string()
+    .trim()
+    .min(1, "Enter your email address.")
+    .email("Enter a valid email address."),
+  password: z.string().min(8, "Password must be at least 8 characters."),
+});
+
+type LoginFormValues = z.infer<typeof loginFormSchema>;
+
+/** Only same-origin paths are allowed as a post-login destination. */
+function safeRedirectPath(next: string | null): string {
+  if (!next || !next.startsWith("/") || next.startsWith("//") || next.startsWith("/\\")) {
+    return "/";
+  }
+  return next;
+}
 
 export function LoginForm() {
   const { login, user } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const { getToken, loaded: turnstileLoaded, error: turnstileError, containerRef } = useTurnstile();
+  const redirectTo = safeRedirectPath(searchParams.get("next"));
+  const [formError, setFormError] = useState<string | null>(null);
+  const {
+    getToken,
+    reset: resetTurnstile,
+    loaded: turnstileLoaded,
+    error: turnstileError,
+    containerRef,
+  } = useTurnstile();
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<LoginFormValues>({
+    resolver: zodResolver(loginFormSchema),
+    defaultValues: { email: "", password: "" },
+  });
 
   useEffect(() => {
     if (user) {
-      router.replace(searchParams.get("next") || "/");
+      router.replace(redirectTo);
     }
-  }, [router, searchParams, user]);
+  }, [redirectTo, router, user]);
 
-  async function handleSubmit(event: FormEvent) {
-    event.preventDefault();
-    const parsed = loginSchema.safeParse({ email, password });
-    if (!parsed.success) {
-      setError(parsed.error.issues[0]?.message ?? "Check the form and try again.");
-      return;
-    }
-
-    setBusy(true);
-    setError(null);
+  async function onSubmit(values: LoginFormValues) {
+    setFormError(null);
     try {
       const turnstileToken = await getToken();
-      await login(parsed.data.email, parsed.data.password, turnstileToken || undefined);
-      router.replace(searchParams.get("next") || "/");
+      await login(values.email, values.password, turnstileToken || undefined);
+      router.replace(redirectTo);
     } catch (err) {
-      setError(
-        formatApiErrorMessage(
-          err,
-          "We couldn't sign you in. Check your email and password.",
-        ),
+      resetTurnstile();
+      setFormError(
+        formatApiErrorMessage(err, "We couldn't sign you in. Check your email and password."),
       );
-    } finally {
-      setBusy(false);
     }
   }
 
+  const bannerError = turnstileError || formError;
+
   return (
-    <form
-      className="space-y-4 rounded-3xl border border-border bg-surface p-6"
-      onSubmit={(event) => void handleSubmit(event)}
-    >
-      <Field label="Email" htmlFor="login-email" required>
-        <TextInput
-          id="login-email"
-          name="email"
-          type="email"
-          autoComplete="email"
-          placeholder="you@company.com"
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-          required
-        />
-      </Field>
-      <Field label="Password" htmlFor="login-password" required>
-        <div className="relative">
-          <TextInput
-            id="login-password"
-            name="password"
-            type={showPassword ? "text" : "password"}
-            autoComplete="current-password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            className="pr-11"
-            required
-          />
-          <button
-            type="button"
-            className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-muted hover:text-foreground"
-            aria-label={showPassword ? "Hide password" : "Show password"}
-            aria-pressed={showPassword}
-            onClick={() => setShowPassword((current) => !current)}
-          >
-            {showPassword ? <EyeOffIcon /> : <EyeIcon />}
-          </button>
+    <div className="w-full">
+      <InvoiceHubLogo />
+
+      <h2 id="login-heading" className="mt-10 text-[28px] font-extrabold leading-tight tracking-tight">
+        Sign in to your account
+      </h2>
+      <p className="mt-2 text-[15px] text-ink/65">
+        Enter your email and password to manage your invoices.
+      </p>
+
+      <form
+        noValidate
+        aria-labelledby="login-heading"
+        className="mt-8 space-y-4"
+        onSubmit={(event) => void handleSubmit(onSubmit)(event)}
+      >
+        <div aria-live="assertive">
+          {bannerError ? (
+            <p
+              role="alert"
+              className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-700 dark:text-red-300"
+            >
+              {bannerError}
+            </p>
+          ) : null}
         </div>
-      </Field>
-      <div ref={containerRef} className="my-2" />
-      {(turnstileError || error) ? (
-        <p className="text-sm text-primary" role="alert">
-          {turnstileError || error}
-        </p>
-      ) : null}
-      <Button type="submit" className="w-full" disabled={busy || !turnstileLoaded}>
-        {busy ? "Signing in…" : "Sign in"}
-      </Button>
-    </form>
+
+        <FloatingInput
+          id="login-email"
+          label="Email address"
+          type="email"
+          inputMode="email"
+          autoComplete="email"
+          autoCapitalize="none"
+          spellCheck={false}
+          error={errors.email?.message}
+          {...register("email")}
+        />
+
+        <PasswordInput
+          id="login-password"
+          label="Password"
+          autoComplete="current-password"
+          error={errors.password?.message}
+          {...register("password")}
+        />
+
+        <div ref={containerRef} className="empty:hidden" />
+
+        <button
+          type="submit"
+          disabled={isSubmitting || !turnstileLoaded}
+          aria-busy={isSubmitting || undefined}
+          className="mt-6 flex w-full items-center justify-center gap-2 rounded-lg bg-leaf py-4 text-[15px] font-bold text-[#04210f] transition-colors hover:bg-leaf-hover disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:bg-leaf"
+        >
+          {isSubmitting ? (
+            <>
+              <Spinner />
+              Signing in…
+            </>
+          ) : (
+            "Sign in"
+          )}
+        </button>
+      </form>
+    </div>
   );
 }
 
-function EyeIcon() {
+function Spinner() {
   return (
-    <svg viewBox="0 0 16 16" fill="none" className="h-4 w-4" aria-hidden>
-      <path
-        d="M2 8s2.2-4 6-4 6 4 6 4-2.2 4-6 4-6-4-6-4Z"
-        stroke="currentColor"
-        strokeWidth="1.3"
-      />
-      <circle cx="8" cy="8" r="1.6" stroke="currentColor" strokeWidth="1.3" />
-    </svg>
-  );
-}
-
-function EyeOffIcon() {
-  return (
-    <svg viewBox="0 0 16 16" fill="none" className="h-4 w-4" aria-hidden>
-      <path
-        d="M2 8s2.2-4 6-4c1.2 0 2.3.4 3.2 1M14 8s-2.2 4-6 4c-1.2 0-2.3-.4-3.2-1"
-        stroke="currentColor"
-        strokeWidth="1.3"
-        strokeLinecap="round"
-      />
-      <path d="m3 3 10 10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-      <circle cx="8" cy="8" r="1.6" stroke="currentColor" strokeWidth="1.3" />
+    <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5 animate-spin" aria-hidden>
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeOpacity="0.25" strokeWidth="3" />
+      <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
     </svg>
   );
 }

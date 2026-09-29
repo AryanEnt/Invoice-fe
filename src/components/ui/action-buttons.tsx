@@ -72,6 +72,21 @@ function EyeIcon() {
   );
 }
 
+function KeyIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" className="h-3.5 w-3.5" aria-hidden="true">
+      <circle cx="5.5" cy="10.5" r="2.8" stroke="currentColor" strokeWidth="1.3" />
+      <path
+        d="M7.5 8.5 13 3M11 5l1.5 1.5M9.5 6.5 11 8"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 function XIcon() {
   return (
     <svg viewBox="0 0 16 16" fill="none" className="h-3.5 w-3.5" aria-hidden="true">
@@ -227,6 +242,23 @@ export function StatusAction({
     >
       {active ? <PowerIcon /> : <CheckIcon />}
       {active ? "Deactivate" : "Activate"}
+    </MemberActionButton>
+  );
+}
+
+export function ResetPasswordAction({
+  onClick,
+  disabled,
+  loading,
+}: {
+  onClick?: () => void;
+  disabled?: boolean;
+  loading?: boolean;
+}) {
+  return (
+    <MemberActionButton tone="edit" onClick={onClick} disabled={disabled} loading={loading}>
+      <KeyIcon />
+      Reset password
     </MemberActionButton>
   );
 }

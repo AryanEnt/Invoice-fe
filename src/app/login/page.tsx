@@ -1,18 +1,36 @@
+import type { Metadata } from "next";
+import { Plus_Jakarta_Sans } from "next/font/google";
 import { Suspense } from "react";
-import { AppLogo } from "@/components/brand/app-logo";
+import { AuthHero } from "@/features/auth/auth-hero";
 import { LoginForm } from "@/features/auth/login-form";
+
+const jakarta = Plus_Jakarta_Sans({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800"],
+  variable: "--font-plus-jakarta",
+  display: "swap",
+});
+
+export const metadata: Metadata = {
+  title: "Sign in | InvoiceHub",
+};
 
 export default function LoginPage() {
   return (
-    <div className="flex flex-1 items-center justify-center bg-background px-4 py-12">
-      <div className="flex w-full max-w-md flex-col items-center gap-3">
-        <AppLogo variant="login" size="lg" priority className="rounded-2xl" />
-        <div className="w-[94%]">
-          <Suspense fallback={<p className="text-sm text-muted">Loading…</p>}>
+    <main
+      className={`${jakarta.variable} grid min-h-screen flex-1 bg-auth-bg font-jakarta text-ink [color-scheme:light_dark] min-[900px]:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]`}
+    >
+      <AuthHero />
+      <section
+        aria-labelledby="login-heading"
+        className="flex min-w-0 items-center justify-center px-5 py-10 sm:px-10"
+      >
+        <div className="w-full max-w-[420px]">
+          <Suspense fallback={<p className="text-sm text-ink/60">Loading…</p>}>
             <LoginForm />
           </Suspense>
         </div>
-      </div>
-    </div>
+      </section>
+    </main>
   );
 }

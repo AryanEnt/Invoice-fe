@@ -4,7 +4,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Field, TextInput } from "@/components/ui/field";
 import { PageHeader } from "@/components/ui/page-header";
+import { SelectedFileName } from "@/components/ui/selected-file-name";
 import { ROLE_LABELS } from "@/config/navigation";
+import { useSelectedImage } from "@/hooks/use-selected-image";
 import { ApiError } from "@/lib/api/types";
 import { useAuth } from "@/providers/auth-provider";
 import { useToast } from "@/providers/toast-provider";
@@ -14,6 +16,7 @@ import {
 } from "@/services/dashboard-forecast.service";
 import {
   getOrganizationSettings,
+  isAllowedLogoFile,
   removeOrganizationLogo,
   uploadOrganizationLogo,
   type OrganizationSettings,
@@ -24,6 +27,7 @@ export function SettingsPage() {
   const { user, loading } = useAuth();
   const { notify } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const selectedLogo = useSelectedImage();
 
   // Super Admin manages company branding; Administrators do not.
   const canManageLogo = user?.role === "SUPER_ADMIN";
@@ -95,7 +99,22 @@ export function SettingsPage() {
     }
   }
 
-  async function handleUpload(file: File | undefined) {
+  function handlePick(file: File | undefined) {
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+    if (!file) {
+      return;
+    }
+    if (!isAllowedLogoFile(file)) {
+      notify("Use a PNG, JPG, or WebP logo up to 2MB.", "error");
+      return;
+    }
+    selectedLogo.select(file);
+  }
+
+  async function handleSaveLogo() {
+    const file = selectedLogo.file;
     if (!file) {
       return;
     }
@@ -103,14 +122,12 @@ export function SettingsPage() {
     try {
       const updated = await uploadOrganizationLogo(file);
       setOrganization(updated);
-      notify("Logo updated successfully");
+      selectedLogo.reset();
+      notify("Logo saved");
     } catch (err) {
       notify(err instanceof Error ? err.message : "Unable to upload logo.", "error");
     } finally {
       setLogoBusy(false);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
     }
   }
 
@@ -119,6 +136,7 @@ export function SettingsPage() {
     try {
       const updated = await removeOrganizationLogo();
       setOrganization(updated);
+      selectedLogo.reset();
       notify("Logo removed");
     } catch (err) {
       notify(err instanceof ApiError ? err.message : "Unable to remove logo.", "error");
@@ -163,15 +181,33 @@ export function SettingsPage() {
             ) : (
               <>
                 <div className="mt-4 flex h-40 w-full max-w-md items-center justify-center rounded-xl border border-dashed border-border bg-muted-soft/40 p-4">
-                  {organization?.logoUrl ? (
+                  {selectedLogo.previewUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
+                      src={selectedLogo.previewUrl}
+                      alt="Selected logo"
+                      className="max-h-full max-w-full object-contain"
+                    />
+                  ) : organization?.logoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      key={organization.logoUrl}
                       src={organization.logoUrl}
                       alt={`${organization.name} logo`}
                       className="max-h-full max-w-full object-contain"
+                      onError={() =>
+                        setOrganization({
+                          ...organization,
+                          logoUrl: null,
+                        })
+                      }
                     />
                   ) : (
-                    <p className="text-sm text-muted">No logo uploaded</p>
+                    <p className="text-sm text-muted">
+                      {organization?.hasLogo
+                        ? "Logo uploaded, but the preview URL could not be loaded. Check R2 public access / CORS."
+                        : "No logo uploaded"}
+                    </p>
                   )}
                 </div>
 
@@ -181,26 +217,49 @@ export function SettingsPage() {
                     type="file"
                     accept="image/png,image/jpeg,image/webp"
                     className="hidden"
-                    onChange={(event) => void handleUpload(event.target.files?.[0])}
+                    onChange={(event) => handlePick(event.target.files?.[0])}
                   />
-                  <Button
-                    type="button"
-                    disabled={logoBusy}
-                    onClick={() => fileInputRef.current?.click()}
-                  >
-                    {organization?.hasLogo ? "Upload New Logo" : "Upload Logo"}
-                  </Button>
-                  {organization?.hasLogo ? (
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      disabled={logoBusy}
-                      onClick={() => void handleRemove()}
-                    >
-                      Remove
-                    </Button>
-                  ) : null}
+                  {selectedLogo.file ? (
+                    <>
+                      <Button
+                        type="button"
+                        disabled={logoBusy}
+                        onClick={() => void handleSaveLogo()}
+                      >
+                        {logoBusy ? "Saving…" : "Save Logo"}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        disabled={logoBusy}
+                        onClick={selectedLogo.reset}
+                      >
+                        Cancel
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <Button
+                        type="button"
+                        disabled={logoBusy}
+                        onClick={() => fileInputRef.current?.click()}
+                      >
+                        {organization?.hasLogo ? "Choose New Logo" : "Choose Logo"}
+                      </Button>
+                      {organization?.hasLogo ? (
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          disabled={logoBusy}
+                          onClick={() => void handleRemove()}
+                        >
+                          Remove
+                        </Button>
+                      ) : null}
+                    </>
+                  )}
                 </div>
+                <SelectedFileName fileName={selectedLogo.fileName} busy={logoBusy} />
               </>
             )}
           </div>

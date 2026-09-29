@@ -3,16 +3,18 @@
 import { useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
-import { Field, PasswordInput, SelectInput, TextInput } from "@/components/ui/field";
+import { Field, SelectInput, TextInput } from "@/components/ui/field";
 import { memberFormSchema } from "@/schemas/member";
 import { usePersistedFormState } from "@/hooks/use-persisted-form-state";
-import type { MemberFormValues, MemberUser } from "@/types/member";
+import type { AdministratorSummary, MemberFormValues, MemberUser } from "@/types/member";
 
 interface MemberFormProps {
   title: string;
   mode: "create" | "edit";
   persistKey: string;
   initialValues?: Partial<MemberFormValues>;
+  /** When provided (Super Admin), the new member can be assigned to an administrator. */
+  administrators?: AdministratorSummary[];
   busy: boolean;
   onClose: () => void;
   onSubmit: (values: MemberFormValues) => Promise<void>;
@@ -23,7 +25,7 @@ const emptyValues: MemberFormValues = {
   lastName: "",
   email: "",
   organizationId: "",
-  temporaryPassword: "",
+  administratorId: "",
   status: "ACTIVE",
 };
 
@@ -32,6 +34,7 @@ export function MemberForm({
   mode,
   persistKey,
   initialValues,
+  administrators,
   busy,
   onClose,
   onSubmit,
@@ -64,6 +67,7 @@ export function MemberForm({
     await onSubmit({
       ...parsed.data,
       organizationId: values.organizationId,
+      administratorId: values.administratorId ?? "",
     });
     clearDraft();
   }
@@ -113,21 +117,26 @@ export function MemberForm({
         </Field>
         {mode === "create" ? (
           <>
-            <Field
-              label="Temporary password"
-              htmlFor="member-password"
-              error={errors.temporaryPassword}
-            >
-              <PasswordInput
-                id="member-password"
-                autoComplete="new-password"
-                value={values.temporaryPassword}
-                onChange={(event) => update("temporaryPassword", event.target.value)}
-              />
-            </Field>
-            <p className="text-xs text-muted">
-              Leave blank to generate a secure temporary password. It will be shown once.
-            </p>
+            {administrators ? (
+              <Field
+                label="Administrator"
+                htmlFor="member-administrator"
+                error={errors.administratorId}
+              >
+                <SelectInput
+                  id="member-administrator"
+                  value={values.administratorId ?? ""}
+                  onChange={(event) => update("administratorId", event.target.value)}
+                >
+                  <option value="">Unassigned</option>
+                  {administrators.map((admin) => (
+                    <option key={admin.id} value={admin.id}>
+                      {admin.firstName} {admin.lastName} ({admin.email})
+                    </option>
+                  ))}
+                </SelectInput>
+              </Field>
+            ) : null}
             <Field label="Status" htmlFor="member-status" error={errors.status}>
               <SelectInput
                 id="member-status"
@@ -140,26 +149,16 @@ export function MemberForm({
                 <option value="INACTIVE">Inactive</option>
               </SelectInput>
             </Field>
-          </>
-        ) : (
-          <>
-            <Field
-              label="New password"
-              htmlFor="member-password-edit"
-              error={errors.temporaryPassword}
-            >
-              <PasswordInput
-                id="member-password-edit"
-                autoComplete="new-password"
-                value={values.temporaryPassword}
-                onChange={(event) => update("temporaryPassword", event.target.value)}
-                placeholder="Leave blank to keep current password"
-              />
-            </Field>
             <p className="text-xs text-muted">
-              Set a new password here, or leave blank to keep the current one.
+              A secure temporary password is generated automatically and shown only once after you
+              save.
             </p>
           </>
+        ) : (
+          <p className="text-xs text-muted">
+            Passwords can&apos;t be viewed or edited here. Use Reset password to issue a new
+            temporary password.
+          </p>
         )}
       </form>
     </Dialog>
@@ -172,7 +171,7 @@ export function valuesFromMember(member: MemberUser): MemberFormValues {
     lastName: member.lastName,
     email: member.email,
     organizationId: member.organizationId ?? "",
-    temporaryPassword: "",
+    administratorId: member.administrator?.id ?? "",
     status: member.status,
   };
 }

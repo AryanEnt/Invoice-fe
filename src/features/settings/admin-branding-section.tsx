@@ -3,10 +3,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Field, TextInput } from "@/components/ui/field";
+import { SelectedFileName } from "@/components/ui/selected-file-name";
+import { useSelectedImage } from "@/hooks/use-selected-image";
 import { ApiError } from "@/lib/api/types";
 import { useToast } from "@/providers/toast-provider";
 import {
   getAdminBranding,
+  isAllowedLogoFile,
   removeAdminBrandingLogo,
   saveAdminBranding,
   uploadAdminBrandingLogo,
@@ -16,6 +19,7 @@ import {
 export function AdminBrandingSection() {
   const { notify } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const selectedLogo = useSelectedImage();
   const [branding, setBranding] = useState<AdminBrandingSettings | null>(null);
   const [companyName, setCompanyName] = useState("");
   const [loading, setLoading] = useState(true);
@@ -63,7 +67,22 @@ export function AdminBrandingSection() {
     }
   }
 
-  async function handleUpload(file: File | undefined) {
+  function handlePick(file: File | undefined) {
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+    if (!file) {
+      return;
+    }
+    if (!isAllowedLogoFile(file)) {
+      notify("Use a PNG, JPG, or WebP logo up to 2MB.", "error");
+      return;
+    }
+    selectedLogo.select(file);
+  }
+
+  async function handleSaveLogo() {
+    const file = selectedLogo.file;
     if (!file) {
       return;
     }
@@ -71,14 +90,12 @@ export function AdminBrandingSection() {
     try {
       const updated = await uploadAdminBrandingLogo(file);
       setBranding(updated);
-      notify("Company logo updated");
+      selectedLogo.reset();
+      notify("Company logo saved");
     } catch (err) {
       notify(err instanceof Error ? err.message : "Unable to upload logo.", "error");
     } finally {
       setLogoBusy(false);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
     }
   }
 
@@ -87,6 +104,7 @@ export function AdminBrandingSection() {
     try {
       const updated = await removeAdminBrandingLogo();
       setBranding(updated);
+      selectedLogo.reset();
       notify("Company logo removed");
     } catch (err) {
       notify(err instanceof ApiError ? err.message : "Unable to remove logo.", "error");
@@ -97,7 +115,8 @@ export function AdminBrandingSection() {
 
   const previewName =
     companyName.trim() || branding?.platformCompanyName || "Your company name";
-  const previewLogo = branding?.companyLogoUrl || branding?.platformLogoUrl;
+  const companyLogo = selectedLogo.previewUrl ?? branding?.companyLogoUrl;
+  const previewLogo = companyLogo || branding?.platformLogoUrl;
 
   return (
     <section id="company-branding" className="rounded-2xl border border-border bg-surface px-5 py-4">
@@ -151,10 +170,10 @@ export function AdminBrandingSection() {
               </p>
 
               <div className="mt-3 flex h-36 w-full max-w-md items-center justify-center rounded-xl border border-dashed border-border bg-muted-soft/40 p-4">
-                {branding?.companyLogoUrl ? (
+                {companyLogo ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
-                    src={branding.companyLogoUrl}
+                    src={companyLogo}
                     alt="Company logo"
                     className="max-h-full max-w-full object-contain"
                   />
@@ -174,27 +193,50 @@ export function AdminBrandingSection() {
                   type="file"
                   accept="image/png,image/jpeg,image/webp"
                   className="hidden"
-                  onChange={(event) => void handleUpload(event.target.files?.[0])}
+                  onChange={(event) => handlePick(event.target.files?.[0])}
                 />
-                <Button
-                  type="button"
-                  variant="secondary"
-                  disabled={logoBusy}
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  {branding?.hasLogo ? "Replace Logo" : "Upload Logo"}
-                </Button>
-                {branding?.hasLogo ? (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    disabled={logoBusy}
-                    onClick={() => void handleRemoveLogo()}
-                  >
-                    Remove
-                  </Button>
-                ) : null}
+                {selectedLogo.file ? (
+                  <>
+                    <Button
+                      type="button"
+                      disabled={logoBusy}
+                      onClick={() => void handleSaveLogo()}
+                    >
+                      {logoBusy ? "Saving…" : "Save Logo"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      disabled={logoBusy}
+                      onClick={selectedLogo.reset}
+                    >
+                      Cancel
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      disabled={logoBusy}
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      {branding?.hasLogo ? "Choose New Logo" : "Choose Logo"}
+                    </Button>
+                    {branding?.hasLogo ? (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        disabled={logoBusy}
+                        onClick={() => void handleRemoveLogo()}
+                      >
+                        Remove
+                      </Button>
+                    ) : null}
+                  </>
+                )}
               </div>
+              <SelectedFileName fileName={selectedLogo.fileName} busy={logoBusy} />
             </div>
 
             <p className="text-xs text-muted">

@@ -110,7 +110,12 @@ export async function apiRequest<T>(
 }
 
 function isBinaryBody(body: BodyInit): boolean {
-  return body instanceof FormData || body instanceof Blob || body instanceof ArrayBuffer;
+  return (
+    body instanceof FormData ||
+    body instanceof Blob ||
+    body instanceof ArrayBuffer ||
+    (typeof File !== "undefined" && body instanceof File)
+  );
 }
 
 function isApiResponse<T>(value: unknown): value is ApiResponse<T> {
