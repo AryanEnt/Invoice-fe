@@ -33,5 +33,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Verify Turnstile configuration
+        run: |
+          if [ -z "$NEXT_PUBLIC_TURNSTILE_SITE_KEY" ]; then
+            echo "NEXT_PUBLIC_TURNSTILE_SITE_KEY is not configured in the production environment."
+            exit 1
+          fi
+
       - name: Build and deploy
         run: npm run deploy
