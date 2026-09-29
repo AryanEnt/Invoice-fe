@@ -55,8 +55,6 @@ function loadTurnstileScript(): Promise<void> {
     // parameter, Turnstile may initialize in implicit-rendering mode before
     // the container is ready, leaving the widget blank.
     script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
-    script.async = true;
-    script.defer = true;
     script.onload = () => {
       window.turnstile?.ready(() => {
         isScriptLoaded = true;
