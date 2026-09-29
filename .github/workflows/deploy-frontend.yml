@@ -15,7 +15,7 @@ jobs:
     environment: production
 
     env:
-      NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL || 'https://invoice-backend-production-5085.up.railway.app' }}
+      NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
       NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${{ secrets.NEXT_PUBLIC_TURNSTILE_SITE_KEY }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -43,10 +43,9 @@ jobs:
       - name: Verify API configuration
         run: |
           if [ -z "$NEXT_PUBLIC_API_URL" ]; then
-            echo "NEXT_PUBLIC_API_URL is not configured in the production environment."
+            echo "Set the NEXT_PUBLIC_API_URL secret in the production GitHub environment."
             exit 1
           fi
-          echo "Using API origin: ${NEXT_PUBLIC_API_URL%/}"
 
       - name: Build and deploy
         run: npm run deploy

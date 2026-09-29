@@ -8,8 +8,12 @@ copy `.env.example` to `.env.local`, then set:
 
 ```env
 NEXT_PUBLIC_API_URL=http://localhost:4000
-NEXT_PUBLIC_TURNSTILE_SITE_KEY=...
+NEXT_PUBLIC_TURNSTILE_SITE_KEY=1x00000000000000000000AA
 ```
+
+The local site key is Cloudflare's always-pass Turnstile test key. Configure the
+matching test secret key in the backend's local `.env`:
+`TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA`.
 
 run:
 
@@ -39,6 +43,9 @@ production frontend values are injected during the github actions build:
 NEXT_PUBLIC_API_URL
 NEXT_PUBLIC_TURNSTILE_SITE_KEY
 ```
+
+`NEXT_PUBLIC_API_URL` is required. The build does not fall back to a hardcoded
+backend URL, and the value is embedded in the browser bundle during deployment.
 
 required github production secrets:
 
