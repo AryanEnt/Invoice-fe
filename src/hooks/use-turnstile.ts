@@ -56,11 +56,9 @@ function loadTurnstileScript(): Promise<void> {
     // the container is ready, leaving the widget blank.
     script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
     script.onload = () => {
-      window.turnstile?.ready(() => {
-        isScriptLoaded = true;
-        isScriptLoading = false;
-        resolve();
-      });
+      isScriptLoaded = true;
+      isScriptLoading = false;
+      resolve();
     };
     script.onerror = () => {
       isScriptLoading = false;
