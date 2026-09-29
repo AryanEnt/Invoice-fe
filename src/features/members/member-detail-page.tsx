@@ -9,7 +9,12 @@ import { MemberForm, valuesFromMember } from "@/features/members/member-form";
 import { ApiError } from "@/lib/api/types";
 import { useAuth } from "@/providers/auth-provider";
 import { useToast } from "@/providers/toast-provider";
-import { getMember, updateMember, updateMemberStatus } from "@/services/members.service";
+import {
+  getMember,
+  setMemberPassword,
+  updateMember,
+  updateMemberStatus,
+} from "@/services/members.service";
 import type { MemberFormValues, MemberUser } from "@/types/member";
 
 interface MemberDetailPageProps {
@@ -67,12 +72,26 @@ export function MemberDetailPage({ memberId }: MemberDetailPageProps) {
     };
   }, [canManage, load]);
 
-  async function handleEdit(values: MemberFormValues) {
+  async function handleEdit(values: MemberFormValues, newPassword?: string) {
     setFormBusy(true);
     try {
       await updateMember(memberId, values);
+      if (newPassword) {
+        try {
+          await setMemberPassword(memberId, newPassword);
+        } catch (err) {
+          notify(
+            err instanceof ApiError
+              ? `Details saved, but the password was not changed: ${err.message}`
+              : "Details saved, but the password was not changed.",
+            "error",
+          );
+          await load();
+          return;
+        }
+      }
       setEditing(false);
-      notify("Member updated");
+      notify(newPassword ? "Member updated. Password changed and they have been signed out." : "Member updated");
       await load();
     } catch (err) {
       notify(err instanceof ApiError ? err.message : "Unable to update member.", "error");

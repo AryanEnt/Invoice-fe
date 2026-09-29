@@ -27,10 +27,15 @@ export const memberFormSchema = z.object({
   lastName: z.string().trim().min(1, "Last name is required"),
   email: z.string().trim().email("Enter a valid email"),
   organizationId: z.string().optional(),
-  temporaryPassword: z
-    .string()
-    .refine((value) => value.length === 0 || value.length >= 8, {
-      message: "Temporary password must be at least 8 characters",
-    }),
+  administratorId: z.string().optional(),
+  status: z.enum(["ACTIVE", "INACTIVE"]),
+});
+
+export const credentialUserSchema = z.object({
+  id: z.string(),
+  email: z.string(),
+  firstName: z.string(),
+  lastName: z.string(),
+  role: z.string(),
   status: z.enum(["ACTIVE", "INACTIVE"]),
 });

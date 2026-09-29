@@ -102,7 +102,36 @@
   --chart-tooltip-shadow: 0 8px 24px rgb(0 0 0 / 0.35);
 }
 
+.auth-light {
+  color-scheme: light;
+  --auth-green: #22b463;
+  --auth-green-hover: #188f4d;
+  --auth-green-tint: #e6f7ec;
+  --auth-ink: #1a2027;
+  --auth-muted: #828d99;
+  --auth-border: #e5e8eb;
+  --auth-bg: #ffffff;
+  --auth-panel: #f4f5f7;
+  --auth-card: #ffffff;
+}
+
+.auth-dot-grid {
+  background-image: radial-gradient(#cfd4da 1.2px, transparent 1.2px);
+  background-size: 20px 20px;
+  mask-image: radial-gradient(ellipse at center, #000 35%, transparent 75%);
+}
+
 @theme inline {
+  --color-auth-green: var(--auth-green);
+  --color-auth-green-hover: var(--auth-green-hover);
+  --color-auth-green-tint: var(--auth-green-tint);
+  --color-auth-ink: var(--auth-ink);
+  --color-auth-muted: var(--auth-muted);
+  --color-auth-border: var(--auth-border);
+  --color-auth-bg: var(--auth-bg);
+  --color-auth-panel: var(--auth-panel);
+  --color-auth-card: var(--auth-card);
+  --font-jakarta: var(--font-plus-jakarta);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-surface: var(--surface);

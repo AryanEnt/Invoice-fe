@@ -47,6 +47,5 @@ export interface AdminFormValues {
   email: string;
   phone: string;
   organizationId: string;
-  temporaryPassword: string;
   status: AccountStatus;
 }

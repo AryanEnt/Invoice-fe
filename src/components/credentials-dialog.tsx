@@ -3,97 +3,84 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
+import { copyText } from "@/lib/copy-text";
 
-export interface CreatedCredentials {
-  teamName?: string;
-  name: string;
-  username: string;
+/**
+ * One-time credentials returned by a create or reset-password request.
+ * Keep this in component state only — never persist it (storage, URL, global state).
+ */
+export interface OneTimeCredentials {
+  title: string;
+  email: string;
   temporaryPassword: string;
-}
-
-function credentialsText(credentials: CreatedCredentials): string {
-  const lines = [
-    credentials.teamName ? `Team: ${credentials.teamName}` : null,
-    `Name: ${credentials.name}`,
-    `Username: ${credentials.username}`,
-    `Temporary Password: ${credentials.temporaryPassword}`,
-  ].filter((line): line is string => Boolean(line));
-  return lines.join("\n");
 }
 
 export function CredentialsDialog({
   credentials,
   onClose,
 }: {
-  credentials: CreatedCredentials;
+  credentials: OneTimeCredentials;
   onClose: () => void;
 }) {
-  const [copied, setCopied] = useState<string | null>(null);
+  const [revealed, setRevealed] = useState(false);
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
 
-  async function copy(label: string, value: string) {
-    await navigator.clipboard.writeText(value);
-    setCopied(label);
+  async function handleCopy() {
+    try {
+      await copyText(
+        `Email: ${credentials.email}\nTemporary password: ${credentials.temporaryPassword}`,
+      );
+      setCopyState("copied");
+    } catch {
+      setCopyState("failed");
+    }
   }
 
   return (
     <Dialog
-      title="Account created successfully"
+      title={credentials.title}
       onClose={onClose}
       footer={
         <>
-          <Button
-            variant="secondary"
-            onClick={() => void copy("all", credentialsText(credentials))}
-          >
-            Copy credentials
+          <Button variant="secondary" onClick={() => void handleCopy()}>
+            {copyState === "copied" ? "Copied" : "Copy credentials"}
           </Button>
-          <Button onClick={onClose}>Done</Button>
+          <Button onClick={onClose}>Close</Button>
         </>
       }
     >
       <div className="space-y-4 text-sm">
-        <p className="rounded-[10px] border border-border bg-muted-soft px-3 py-2 text-foreground">
-          Save these credentials before closing. The temporary password will not be shown again.
-        </p>
-        <dl className="grid gap-2">
-          {credentials.teamName ? (
-            <div>
-              <dt className="text-xs uppercase tracking-wide text-muted">Team</dt>
-              <dd className="font-medium">{credentials.teamName}</dd>
-            </div>
-          ) : null}
+        <dl className="grid gap-3">
           <div>
-            <dt className="text-xs uppercase tracking-wide text-muted">Name</dt>
-            <dd className="font-medium">{credentials.name}</dd>
-          </div>
-          <div>
-            <dt className="text-xs uppercase tracking-wide text-muted">Username</dt>
-            <dd className="font-medium">{credentials.username}</dd>
+            <dt className="text-xs uppercase tracking-wide text-muted">Email</dt>
+            <dd className="font-medium text-foreground">{credentials.email}</dd>
           </div>
           <div>
             <dt className="text-xs uppercase tracking-wide text-muted">Temporary password</dt>
-            <dd className="font-mono text-base">{credentials.temporaryPassword}</dd>
+            <dd className="flex items-center gap-2">
+              <span className="font-mono text-base text-foreground" aria-live="polite">
+                {revealed ? credentials.temporaryPassword : "••••••••"}
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setRevealed((value) => !value)}
+                aria-pressed={revealed}
+              >
+                {revealed ? "Hide" : "Show"}
+              </Button>
+            </dd>
           </div>
         </dl>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => void copy("username", credentials.username)}
-          >
-            Copy username
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => void copy("password", credentials.temporaryPassword)}
-          >
-            Copy password
-          </Button>
-        </div>
-        {copied ? <p className="text-xs text-success">Copied {copied}.</p> : null}
+        <p className="rounded-[10px] border border-border bg-muted-soft px-3 py-2 text-foreground">
+          This password is shown only once. Copy the credentials before closing this window.
+        </p>
+        {copyState === "failed" ? (
+          <p className="text-xs text-danger">
+            Couldn&apos;t copy automatically. Use Show and copy the password manually.
+          </p>
+        ) : null}
       </div>
     </Dialog>
   );

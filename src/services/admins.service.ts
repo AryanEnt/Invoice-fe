@@ -1,7 +1,10 @@
+import { z } from "zod";
 import { apiRequest } from "@/lib/api/client";
 import { clampPageSize, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from "@/lib/pagination";
 import { adminListResultSchema, adminUserSchema } from "@/schemas/admin";
+import { credentialUserSchema } from "@/schemas/member";
 import type { AdminFormValues, AdminListQuery, AdminListResult, AdminUser } from "@/types/admin";
+import type { CredentialUser } from "@/types/member";
 import type { AccountStatus } from "@/types/auth";
 
 function toQueryString(query: AdminListQuery): string {
@@ -24,16 +27,12 @@ export async function getAdmin(id: string): Promise<AdminUser> {
   return adminUserSchema.parse(data.user);
 }
 
+/** The temporary password is returned once; callers must keep it in component state only. */
 export async function createAdmin(values: AdminFormValues): Promise<{
   user: AdminUser;
-  temporaryPassword: string | null;
-  invitationToken: string;
+  temporaryPassword: string;
 }> {
-  const data = await apiRequest<{
-    user: AdminUser;
-    temporaryPassword: string | null;
-    invitationToken: string;
-  }>("/api/admins", {
+  const data = await apiRequest<{ user: AdminUser; temporaryPassword: string }>("/api/admins", {
     method: "POST",
     body: JSON.stringify({
       firstName: values.firstName,
@@ -45,8 +44,7 @@ export async function createAdmin(values: AdminFormValues): Promise<{
 
   return {
     user: adminUserSchema.parse(data.user),
-    temporaryPassword: data.temporaryPassword,
-    invitationToken: data.invitationToken,
+    temporaryPassword: z.string().min(1).parse(data.temporaryPassword),
   };
 }
 
@@ -75,10 +73,26 @@ export async function updateAdminStatus(id: string, status: AccountStatus): Prom
   return adminUserSchema.parse(data.user);
 }
 
-export async function resetAdminPassword(id: string): Promise<{ temporaryPassword: string }> {
-  const data = await apiRequest<{ temporaryPassword: string }>(`/api/admins/${id}/password`, {
-    method: "POST",
+/** Sets a Super Admin–chosen password. The server never echoes it back. */
+export async function setAdminPassword(id: string, newPassword: string): Promise<CredentialUser> {
+  const data = await apiRequest<{ user: CredentialUser }>(`/api/admins/${id}/password`, {
+    method: "PUT",
+    body: JSON.stringify({ newPassword }),
   });
+  return credentialUserSchema.parse(data.user);
+}
 
-  return data;
+/** The temporary password is returned once; callers must keep it in component state only. */
+export async function resetAdminPassword(
+  id: string,
+): Promise<{ user: CredentialUser; temporaryPassword: string }> {
+  const data = await apiRequest<{ user: CredentialUser; temporaryPassword: string }>(
+    `/api/admins/${id}/password`,
+    { method: "POST" },
+  );
+
+  return {
+    user: credentialUserSchema.parse(data.user),
+    temporaryPassword: z.string().min(1).parse(data.temporaryPassword),
+  };
 }

@@ -3,19 +3,23 @@
 import { useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
-import { Field, PasswordInput, SelectInput, TextInput } from "@/components/ui/field";
+import { ChangePasswordFields, validateNewPassword } from "@/components/change-password-fields";
+import { Field, SelectInput, TextInput } from "@/components/ui/field";
 import { memberFormSchema } from "@/schemas/member";
 import { usePersistedFormState } from "@/hooks/use-persisted-form-state";
-import type { MemberFormValues, MemberUser } from "@/types/member";
+import type { AdministratorSummary, MemberFormValues, MemberUser } from "@/types/member";
 
 interface MemberFormProps {
   title: string;
   mode: "create" | "edit";
   persistKey: string;
   initialValues?: Partial<MemberFormValues>;
+  /** When provided (Super Admin), the new member can be assigned to an administrator. */
+  administrators?: AdministratorSummary[];
   busy: boolean;
   onClose: () => void;
-  onSubmit: (values: MemberFormValues) => Promise<void>;
+  /** `newPassword` is only set in edit mode when one was entered. */
+  onSubmit: (values: MemberFormValues, newPassword?: string) => Promise<void>;
 }
 
 const emptyValues: MemberFormValues = {
@@ -23,7 +27,7 @@ const emptyValues: MemberFormValues = {
   lastName: "",
   email: "",
   organizationId: "",
-  temporaryPassword: "",
+  administratorId: "",
   status: "ACTIVE",
 };
 
@@ -32,6 +36,7 @@ export function MemberForm({
   mode,
   persistKey,
   initialValues,
+  administrators,
   busy,
   onClose,
   onSubmit,
@@ -41,6 +46,10 @@ export function MemberForm({
     ...initialValues,
   });
   const [errors, setErrors] = useState<Partial<Record<keyof MemberFormValues, string>>>({});
+  // Kept out of the persisted draft so passwords never reach sessionStorage.
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordError, setPasswordError] = useState<string | null>(null);
 
   function update<K extends keyof MemberFormValues>(key: K, value: MemberFormValues[K]) {
     setValues((current) => ({ ...current, [key]: value }));
@@ -60,11 +69,22 @@ export function MemberForm({
       setErrors(nextErrors);
       return;
     }
+    const nextPasswordError =
+      mode === "edit" ? validateNewPassword(newPassword, confirmPassword) : null;
+    if (nextPasswordError) {
+      setPasswordError(nextPasswordError);
+      return;
+    }
     setErrors({});
-    await onSubmit({
-      ...parsed.data,
-      organizationId: values.organizationId,
-    });
+    setPasswordError(null);
+    await onSubmit(
+      {
+        ...parsed.data,
+        organizationId: values.organizationId,
+        administratorId: values.administratorId ?? "",
+      },
+      mode === "edit" && newPassword ? newPassword : undefined,
+    );
     clearDraft();
   }
 
@@ -113,21 +133,26 @@ export function MemberForm({
         </Field>
         {mode === "create" ? (
           <>
-            <Field
-              label="Temporary password"
-              htmlFor="member-password"
-              error={errors.temporaryPassword}
-            >
-              <PasswordInput
-                id="member-password"
-                autoComplete="new-password"
-                value={values.temporaryPassword}
-                onChange={(event) => update("temporaryPassword", event.target.value)}
-              />
-            </Field>
-            <p className="text-xs text-muted">
-              Leave blank to generate a secure temporary password. It will be shown once.
-            </p>
+            {administrators ? (
+              <Field
+                label="Administrator"
+                htmlFor="member-administrator"
+                error={errors.administratorId}
+              >
+                <SelectInput
+                  id="member-administrator"
+                  value={values.administratorId ?? ""}
+                  onChange={(event) => update("administratorId", event.target.value)}
+                >
+                  <option value="">Unassigned</option>
+                  {administrators.map((admin) => (
+                    <option key={admin.id} value={admin.id}>
+                      {admin.firstName} {admin.lastName} ({admin.email})
+                    </option>
+                  ))}
+                </SelectInput>
+              </Field>
+            ) : null}
             <Field label="Status" htmlFor="member-status" error={errors.status}>
               <SelectInput
                 id="member-status"
@@ -140,26 +165,21 @@ export function MemberForm({
                 <option value="INACTIVE">Inactive</option>
               </SelectInput>
             </Field>
-          </>
-        ) : (
-          <>
-            <Field
-              label="New password"
-              htmlFor="member-password-edit"
-              error={errors.temporaryPassword}
-            >
-              <PasswordInput
-                id="member-password-edit"
-                autoComplete="new-password"
-                value={values.temporaryPassword}
-                onChange={(event) => update("temporaryPassword", event.target.value)}
-                placeholder="Leave blank to keep current password"
-              />
-            </Field>
             <p className="text-xs text-muted">
-              Set a new password here, or leave blank to keep the current one.
+              A secure temporary password is generated automatically and shown only once after you
+              save.
             </p>
           </>
+        ) : (
+          <ChangePasswordFields
+            idPrefix="member"
+            subject="member"
+            newPassword={newPassword}
+            confirmPassword={confirmPassword}
+            error={passwordError}
+            onNewPasswordChange={setNewPassword}
+            onConfirmPasswordChange={setConfirmPassword}
+          />
         )}
       </form>
     </Dialog>
@@ -172,7 +192,7 @@ export function valuesFromMember(member: MemberUser): MemberFormValues {
     lastName: member.lastName,
     email: member.email,
     organizationId: member.organizationId ?? "",
-    temporaryPassword: "",
+    administratorId: member.administrator?.id ?? "",
     status: member.status,
   };
 }
