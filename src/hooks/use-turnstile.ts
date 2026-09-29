@@ -51,13 +51,18 @@ function loadTurnstileScript(): Promise<void> {
   isScriptLoading = true;
   scriptLoadPromise = new Promise((resolve, reject) => {
     const script = document.createElement("script");
-    script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js";
+    // This hook uses the explicit rendering API below. Without this query
+    // parameter, Turnstile may initialize in implicit-rendering mode before
+    // the container is ready, leaving the widget blank.
+    script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
     script.async = true;
     script.defer = true;
     script.onload = () => {
-      isScriptLoaded = true;
-      isScriptLoading = false;
-      resolve();
+      window.turnstile?.ready(() => {
+        isScriptLoaded = true;
+        isScriptLoading = false;
+        resolve();
+      });
     };
     script.onerror = () => {
       isScriptLoading = false;
