@@ -70,44 +70,29 @@ function loadTurnstileScript(): Promise<void> {
   return scriptLoadPromise;
 }
 
-// Check if we're in a development environment without proper Turnstile config
-// Test key (1x...) should work on localhost with a testing banner
-function isLocalDevWithoutTurnstile(): boolean {
-  if (typeof window === "undefined") return false;
-  const isLocalhost = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
-  const siteKey = getTurnstileSiteKey();
-  // Only use mock mode if NO site key is configured
-  const hasNoKey = !siteKey || siteKey.trim() === "";
-  return isLocalhost && hasNoKey;
-}
-
 export function useTurnstile({ theme = "auto" }: { theme?: TurnstileRenderOptions["theme"] } = {}) {
   const [widgetId, setWidgetId] = useState<string | null>(null);
-  const [loaded, setLoaded] = useState(false);
+  const [scriptLoaded, setScriptLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const tokenRef = useRef<string | null>(null);
   const resolveRef = useRef<((token: string) => void) | null>(null);
   const widgetContainerRef = useRef<HTMLDivElement | null>(null);
-  const siteKey = getTurnstileSiteKey();
+  const siteKey = getTurnstileSiteKey().trim();
   const isMountedRef = useRef(true);
-  const useMockMode = isLocalDevWithoutTurnstile();
+  // Without a site key there is no widget to render; the API decides whether a token is required.
+  const useMockMode = !siteKey;
+  const loaded = useMockMode || scriptLoaded;
 
-  // In mock mode (localhost with test key), simulate loaded state immediately
   useEffect(() => {
-    if (useMockMode) {
-      setLoaded(true);
-      return;
-    }
-
-    if (!siteKey) return;
+    if (useMockMode) return;
 
     let cancelled = false;
 
     loadTurnstileScript()
       .then(() => {
         if (!cancelled && isMountedRef.current) {
-          setLoaded(true);
+          setScriptLoaded(true);
         }
       })
       .catch((err) => {
@@ -192,12 +177,7 @@ export function useTurnstile({ theme = "auto" }: { theme?: TurnstileRenderOption
   }, [removeWidget]);
 
   const getToken = useCallback(async (): Promise<string | null> => {
-    if (useMockMode) {
-      // Return a mock token for local development
-      return "mock-turnstile-token";
-    }
-
-    if (!siteKey) return null;
+    if (useMockMode) return null;
     if (!widgetId || !window.turnstile) return tokenRef.current;
 
     if (tokenRef.current) {
@@ -208,7 +188,7 @@ export function useTurnstile({ theme = "auto" }: { theme?: TurnstileRenderOption
       resolveRef.current = resolve;
       window.turnstile!.execute(widgetId);
     });
-  }, [siteKey, widgetId, useMockMode]);
+  }, [widgetId, useMockMode]);
 
   const reset = useCallback(() => {
     if (useMockMode) {
