@@ -8,7 +8,7 @@ export const paymentSchema = z.object({
   amount: z.string(),
   currency: z.string(),
   method: z.enum(["CASH", "BANK_TRANSFER", "CHECK", "OTHER", "CARD"]),
-  provider: z.enum(["MANUAL", "STRIPE", "PAYPAL"]),
+  provider: z.enum(["MANUAL", "STRIPE"]),
   providerTransactionId: z.string().nullable(),
   status: z.enum(["PENDING", "COMPLETED", "FAILED", "REFUNDED", "CANCELLED"]),
   paidAt: z.string().nullable(),

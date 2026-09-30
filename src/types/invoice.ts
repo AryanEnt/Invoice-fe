@@ -57,6 +57,7 @@ export interface Invoice {
   notes: string | null;
   terms: string | null;
   shareUrl: string | null;
+  stripeHostedInvoiceUrl: string | null;
   emailStatus: InvoiceEmailStatus;
   emailSentAt: string | null;
   sentAt: string | null;
@@ -132,14 +133,10 @@ export interface PublicInvoice {
     unitPrice: string;
     lineTotal: string;
   }>;
-  paypal?: {
-    available: boolean;
-    message: string | null;
-    lastPayment: { transactionId: string; paidAt: string; amount: string } | null;
-  };
   stripe?: {
     available: boolean;
     message: string | null;
+    hostedInvoiceUrl: string | null;
     lastPayment: { transactionId: string; paidAt: string; amount: string } | null;
   };
 }
