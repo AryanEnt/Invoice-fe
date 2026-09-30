@@ -1,5 +1,4 @@
 import { apiRequest } from "@/lib/api/client";
-import { clampPageSize, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from "@/lib/pagination";
 import { paymentListResultSchema, paymentSchema } from "@/schemas/payment";
 import { invoiceSchema } from "@/schemas/invoice";
 import type { Invoice } from "@/types/invoice";
@@ -25,7 +24,7 @@ export async function listPayments(query: {
   if (query.dateFrom) params.set("dateFrom", query.dateFrom);
   if (query.dateTo) params.set("dateTo", query.dateTo);
   params.set("page", String(query.page ?? 1));
-  params.set("pageSize", String(clampPageSize(query.pageSize, MAX_PAGE_SIZE, DEFAULT_PAGE_SIZE)));
+  params.set("pageSize", String(query.pageSize ?? 10));
   return paymentListResultSchema.parse(
     await apiRequest<PaymentListResult>(`/api/payments?${params}`),
   );

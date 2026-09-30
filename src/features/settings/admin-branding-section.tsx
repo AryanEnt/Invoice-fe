@@ -172,7 +172,7 @@ export function AdminBrandingSection() {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="image/png,image/jpeg,image/webp"
+                  accept="image/png,image/jpeg,image/webp,image/svg+xml"
                   className="hidden"
                   onChange={(event) => void handleUpload(event.target.files?.[0])}
                 />

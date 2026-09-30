@@ -5,32 +5,20 @@ export const CHART_HEIGHT = 280;
 export const CHART_COLORS = {
   primary: "var(--chart-primary)",
   secondary: "var(--chart-secondary)",
-  tertiary: "var(--chart-tertiary)",
-  quaternary: "var(--chart-quaternary)",
   muted: "var(--chart-muted)",
   grid: "var(--chart-grid)",
   axis: "var(--chart-axis)",
-  success: "var(--chart-success)",
-  warning: "var(--chart-warning)",
-  danger: "var(--chart-danger)",
-  info: "var(--chart-info)",
-  neutral: "var(--chart-neutral)",
-  /** Semantic series aliases used across dashboards */
-  paid: "var(--chart-paid)",
-  pending: "var(--chart-sent)",
-  partial: "var(--chart-partial)",
-  overdue: "var(--chart-overdue)",
-  cancelled: "var(--chart-cancelled)",
-  draft: "var(--chart-draft)",
-  viewed: "var(--chart-viewed)",
-  collected: "var(--chart-success)",
-  outstanding: "var(--chart-warning)",
+  paid: "#141517",
+  pending: "#6b6d70",
+  partial: "#9a9b9d",
+  overdue: "#d41920",
+  cancelled: "#c8c9cb",
 };
 
 export const INVOICE_STATUS_COLORS: Record<string, string> = {
-  DRAFT: CHART_COLORS.draft,
+  DRAFT: CHART_COLORS.muted,
   SENT: CHART_COLORS.pending,
-  VIEWED: CHART_COLORS.viewed,
+  VIEWED: CHART_COLORS.partial,
   PAID: CHART_COLORS.paid,
   OVERDUE: CHART_COLORS.overdue,
   CANCELLED: CHART_COLORS.cancelled,
@@ -52,11 +40,9 @@ export const INVOICE_STATUS_LABELS: Record<string, string> = {
 export const tooltipStyle = {
   backgroundColor: "var(--chart-tooltip-bg)",
   border: "1px solid var(--chart-tooltip-border)",
-  borderRadius: 10,
+  borderRadius: 8,
   fontSize: 12,
   color: "var(--foreground)",
-  boxShadow: "var(--chart-tooltip-shadow)",
-  padding: "8px 10px",
 };
 
 export function formatPeriodLabel(period: string): string {

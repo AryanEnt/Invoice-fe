@@ -1,5 +1,4 @@
 import { apiRequest } from "@/lib/api/client";
-import { clampPageSize, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from "@/lib/pagination";
 import { adminListResultSchema, adminUserSchema } from "@/schemas/admin";
 import type { AdminFormValues, AdminListQuery, AdminListResult, AdminUser } from "@/types/admin";
 import type { AccountStatus } from "@/types/auth";
@@ -10,7 +9,7 @@ function toQueryString(query: AdminListQuery): string {
   if (query.status) params.set("status", query.status);
   if (query.organizationId) params.set("organizationId", query.organizationId);
   params.set("page", String(query.page ?? 1));
-  params.set("pageSize", String(clampPageSize(query.pageSize, MAX_PAGE_SIZE, DEFAULT_PAGE_SIZE)));
+  params.set("pageSize", String(query.pageSize ?? 10));
   return params.toString();
 }
 

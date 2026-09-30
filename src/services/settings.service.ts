@@ -14,6 +14,7 @@ const ALLOWED_LOGO_TYPES = new Set([
   "image/jpeg",
   "image/jpg",
   "image/webp",
+  "image/svg+xml",
 ]);
 
 export function isAllowedLogoFile(file: File): boolean {
@@ -27,7 +28,7 @@ export async function getOrganizationSettings(): Promise<OrganizationSettings> {
 
 export async function uploadOrganizationLogo(file: File): Promise<OrganizationSettings> {
   if (!isAllowedLogoFile(file)) {
-    throw new Error("Use a PNG, JPG, or WebP logo up to 2MB.");
+    throw new Error("Use a PNG, JPG, WebP, or SVG logo up to 2MB.");
   }
 
   const contentType = file.type === "image/jpg" ? "image/jpeg" : file.type;
@@ -139,7 +140,7 @@ export async function saveAdminBranding(input: {
 
 export async function uploadAdminBrandingLogo(file: File): Promise<AdminBrandingSettings> {
   if (!isAllowedLogoFile(file)) {
-    throw new Error("Use a PNG, JPG, or WebP logo up to 2MB.");
+    throw new Error("Use a PNG, JPG, WebP, or SVG logo up to 2MB.");
   }
 
   const contentType = file.type === "image/jpg" ? "image/jpeg" : file.type;

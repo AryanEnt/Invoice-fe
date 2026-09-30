@@ -80,22 +80,12 @@ export function CollectedOutstandingChart({
             ]}
           />
           <Legend
-            iconType="circle"
-            formatter={(value) => (
-              <span className="text-xs text-foreground/80">
-                {value === "collected" ? "Collected" : "Outstanding"}
-              </span>
-            )}
+            formatter={(value) => (value === "collected" ? "Collected" : "Outstanding")}
           />
-          <Bar
-            dataKey="collected"
-            fill={CHART_COLORS.collected}
-            radius={[4, 4, 0, 0]}
-            maxBarSize={28}
-          />
+          <Bar dataKey="collected" fill={CHART_COLORS.paid} radius={[4, 4, 0, 0]} maxBarSize={28} />
           <Bar
             dataKey="outstanding"
-            fill={CHART_COLORS.outstanding}
+            fill={CHART_COLORS.overdue}
             radius={[4, 4, 0, 0]}
             maxBarSize={28}
           />

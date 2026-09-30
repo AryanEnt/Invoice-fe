@@ -99,9 +99,9 @@ export function TimeSeriesChart({
               type="monotone"
               dataKey="value"
               stroke={CHART_COLORS.primary}
-              strokeWidth={2.5}
+              strokeWidth={2}
               dot={data.length <= 16}
-              activeDot={{ r: 5, strokeWidth: 0 }}
+              activeDot={{ r: 4 }}
             />
           )}
         </Chart>

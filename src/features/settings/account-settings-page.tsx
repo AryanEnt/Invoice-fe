@@ -148,7 +148,7 @@ export function AccountSettingsPage() {
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/png,image/jpeg,image/webp"
+              accept="image/png,image/jpeg,image/webp,image/svg+xml"
               className="hidden"
               onChange={(event) => void handleAvatar(event.target.files?.[0])}
             />
