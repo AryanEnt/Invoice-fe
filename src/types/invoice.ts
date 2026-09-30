@@ -57,7 +57,7 @@ export interface Invoice {
   notes: string | null;
   terms: string | null;
   shareUrl: string | null;
-  stripeHostedInvoiceUrl: string | null;
+  stripeHostedInvoiceUrl?: string | null;
   emailStatus: InvoiceEmailStatus;
   emailSentAt: string | null;
   sentAt: string | null;
