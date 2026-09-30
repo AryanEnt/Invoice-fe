@@ -56,6 +56,7 @@ export const invoiceSchema = z.object({
   notes: z.string().nullable(),
   terms: z.string().nullable(),
   shareUrl: z.string().nullable(),
+  stripeHostedInvoiceUrl: z.string().nullable().optional(),
   emailStatus: z.enum(["NOT_SENT", "SENT", "FAILED"]),
   emailSentAt: z.string().nullable(),
   sentAt: z.string().nullable(),
