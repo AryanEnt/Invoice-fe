@@ -1,5 +1,5 @@
 export function getApiBaseUrl(): string {
-  const url = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+  const url = process.env.NEXT_PUBLIC_API_URL || "https://invoice-backend-production-5085.up.railway.app";
   return url.replace(/\/$/, "");
 }
 
