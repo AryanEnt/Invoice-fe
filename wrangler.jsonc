@@ -25,6 +25,6 @@
 		"binding": "IMAGES"
 	},
 	"vars": {
-		"NEXT_PUBLIC_API_URL": "https://invoice-backend-production-1450.up.railway.app/ "
+		"NEXT_PUBLIC_API_URL": "https://invoice-backend-production-5085.up.railway.app"
 	}
 }
