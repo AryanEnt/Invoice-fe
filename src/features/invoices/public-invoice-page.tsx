@@ -8,11 +8,8 @@ import { TableSkeleton } from "@/components/ui/skeleton";
 import { formatMoney } from "@/lib/invoice-calc";
 import { ApiError } from "@/lib/api/types";
 import {
-  capturePublicPayPalOrder,
-  confirmPublicStripeCheckout,
   createPublicStripeCheckout,
   getPublicInvoice,
-  getPublicInvoicePaymentStatus,
 } from "@/services/invoices.service";
 import type { PublicInvoice } from "@/types/invoice";
 
@@ -21,13 +18,7 @@ export function PublicInvoicePage({ token }: { token: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [payBusy, setPayBusy] = useState(false);
-  const [payMessage, setPayMessage] = useState<string | null>(null);
   const [payError, setPayError] = useState<string | null>(null);
-  const [captureResult, setCaptureResult] = useState<{
-    amount: string;
-    currency: string;
-    transactionId: string | null;
-  } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -48,124 +39,9 @@ export function PublicInvoicePage({ token }: { token: string }) {
     return () => window.clearTimeout(timer);
   }, [load]);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const params = new URLSearchParams(window.location.search);
-    const paypal = params.get("paypal");
-    const orderId = params.get("token");
-    if (!paypal) return;
-
-    const clean = () => {
-      const url = new URL(window.location.href);
-      url.searchParams.delete("paypal");
-      url.searchParams.delete("token");
-      url.searchParams.delete("PayerID");
-      window.history.replaceState({}, "", url.pathname + url.search + url.hash);
-    };
-
-    const timer = window.setTimeout(() => {
-      if (paypal === "cancel") {
-        setPayMessage("Payment cancelled. Your invoice has not been paid.");
-        clean();
-        return;
-      }
-
-      if (paypal === "return" && orderId) {
-        void (async () => {
-          setPayBusy(true);
-          try {
-            const result = await capturePublicPayPalOrder(token, orderId);
-            setCaptureResult({
-              amount: result.amount,
-              currency: result.currency,
-              transactionId: result.transactionId,
-            });
-            if (!result.paid) {
-              for (let i = 0; i < 8; i += 1) {
-                await new Promise((resolve) => window.setTimeout(resolve, 1500));
-                try {
-                  const status = await getPublicInvoicePaymentStatus(token);
-                  if (status.paymentStatus === "COMPLETED") break;
-                } catch (pollErr) {
-                  if (pollErr instanceof ApiError && pollErr.isRateLimited) break;
-                }
-              }
-            }
-            await load();
-          } catch (err) {
-            setPayError(
-              err instanceof ApiError ? err.message : "Payment could not be completed. Please try again.",
-            );
-          } finally {
-            setPayBusy(false);
-            clean();
-          }
-        })();
-      }
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [load, token]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const params = new URLSearchParams(window.location.search);
-    const stripe = params.get("stripe");
-    if (!stripe) return;
-
-    const clean = () => {
-      const url = new URL(window.location.href);
-      url.searchParams.delete("stripe");
-      url.searchParams.delete("session_id");
-      window.history.replaceState({}, "", url.pathname + url.search + url.hash);
-    };
-
-    const timer = window.setTimeout(() => {
-      if (stripe === "cancel") {
-        setPayMessage("Payment cancelled. Your invoice has not been paid.");
-        clean();
-        return;
-      }
-
-      if (stripe === "success") {
-        void (async () => {
-          setPayBusy(true);
-          try {
-            const result = await confirmPublicStripeCheckout(token);
-            setCaptureResult({
-              amount: result.amount,
-              currency: result.currency,
-              transactionId: result.transactionId,
-            });
-            if (!result.paid) {
-              for (let i = 0; i < 8; i += 1) {
-                await new Promise((resolve) => window.setTimeout(resolve, 1500));
-                try {
-                  const status = await getPublicInvoicePaymentStatus(token);
-                  if (status.paymentStatus === "COMPLETED") break;
-                } catch (pollErr) {
-                  if (pollErr instanceof ApiError && pollErr.isRateLimited) break;
-                }
-              }
-            }
-            await load();
-          } catch (err) {
-            setPayError(
-              err instanceof ApiError ? err.message : "Payment could not be confirmed. Please wait a moment and refresh.",
-            );
-          } finally {
-            setPayBusy(false);
-            clean();
-          }
-        })();
-      }
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [load, token]);
-
   async function handleStripe() {
     setPayBusy(true);
     setPayError(null);
-    setPayMessage(null);
     try {
       const { checkoutUrl } = await createPublicStripeCheckout(token);
       window.location.assign(checkoutUrl);
@@ -198,9 +74,7 @@ export function PublicInvoicePage({ token }: { token: string }) {
   }
 
   const paid = invoice.paymentStatus === "PAID";
-  const paypal = invoice.paypal;
   const stripe = invoice.stripe;
-  // PayPal is kept in Payment Gateway settings but not shown on client invoices.
   const showPaymentMethods = !paid && Boolean(stripe?.available);
   const paymentMessage = !paid && !showPaymentMethods ? (stripe?.message ?? null) : null;
 
@@ -292,15 +166,8 @@ export function PublicInvoicePage({ token }: { token: string }) {
           <div className="mt-6 rounded-xl border border-success/30 bg-success-soft px-4 py-4 text-sm">
             <p className="font-semibold text-success">✓ Paid</p>
             <p className="mt-1 text-foreground">Payment completed successfully.</p>
-            {captureResult ? (
-              <p className="mt-2 text-muted">
-                {formatMoney(captureResult.amount, captureResult.currency)}
-                {captureResult.transactionId ? ` · ${captureResult.transactionId}` : null}
-              </p>
-            ) : stripe?.lastPayment?.transactionId ? (
+            {stripe?.lastPayment?.transactionId ? (
               <p className="mt-2 text-muted">Transaction ID: {stripe.lastPayment.transactionId}</p>
-            ) : paypal?.lastPayment?.transactionId ? (
-              <p className="mt-2 text-muted">Transaction ID: {paypal.lastPayment.transactionId}</p>
             ) : null}
           </div>
         ) : showPaymentMethods ? (
@@ -309,12 +176,18 @@ export function PublicInvoicePage({ token }: { token: string }) {
             <p className="mt-2 text-sm text-muted">
               Amount due {formatMoney(invoice.balanceDue, invoice.currency)}
             </p>
-            {payMessage ? <p className="mt-3 text-sm text-muted">{payMessage}</p> : null}
             {payError ? <p className="mt-3 text-sm text-primary">{payError}</p> : null}
             <div className="mt-4 flex flex-wrap gap-2">
-              {stripe?.available ? (
+              {stripe?.hostedInvoiceUrl ? (
+                <a
+                  href={stripe.hostedInvoiceUrl}
+                  className="inline-flex h-9 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-white hover:opacity-90"
+                >
+                  Pay securely on Stripe
+                </a>
+              ) : stripe?.available ? (
                 <Button disabled={payBusy} onClick={() => void handleStripe()}>
-                  {payBusy ? "Connecting…" : "Pay with Card"}
+                  {payBusy ? "Opening Stripe…" : "Get Stripe payment link"}
                 </Button>
               ) : null}
             </div>

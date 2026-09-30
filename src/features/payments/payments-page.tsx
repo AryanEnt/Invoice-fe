@@ -36,9 +36,6 @@ function formatPaymentMethod(payment: Payment): string {
   if (payment.provider === "STRIPE") {
     return "Stripe";
   }
-  if (payment.provider === "PAYPAL") {
-    return "PayPal";
-  }
   return payment.method.replaceAll("_", " ");
 }
 
@@ -143,7 +140,7 @@ export function PaymentsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Payments"
-        description={`Payments from Stripe and PayPal appear here after a customer pays. ${scopeLabel}.`}
+        description={`Payments from Stripe appear here after a customer pays. ${scopeLabel}.`}
         actions={
           canRecord && payableInvoices.length > 0 ? (
             <Button onClick={() => setPickerOpen(true)}>Record payment</Button>

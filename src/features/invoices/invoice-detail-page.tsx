@@ -128,6 +128,16 @@ export function InvoiceDetailPage({ invoiceId }: InvoiceDetailPageProps) {
           <>
             <InvoiceStatusWithViewed status={invoice.status} viewedAt={invoice.viewedAt} />
             <StatusBadge status={invoice.emailStatus} />
+            {invoice.stripeHostedInvoiceUrl ? (
+              <a
+                href={invoice.stripeHostedInvoiceUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex h-8 items-center rounded-md border border-border px-3 text-[13px] font-medium hover:bg-muted-soft"
+              >
+                Stripe payment page
+              </a>
+            ) : null}
             <CopyLinkAction
               disabled={busy}
               onClick={() =>

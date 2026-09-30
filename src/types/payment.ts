@@ -7,7 +7,7 @@ export type PaymentRecordStatus =
 
 export type PaymentMethod = "CASH" | "BANK_TRANSFER" | "CHECK" | "OTHER" | "CARD";
 
-export type PaymentProvider = "MANUAL" | "STRIPE" | "PAYPAL";
+export type PaymentProvider = "MANUAL" | "STRIPE";
 
 export interface Payment {
   id: string;
